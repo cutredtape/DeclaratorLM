@@ -1,0 +1,551 @@
+M
+k
+ pcs.
+(not specified)
+0.0s
+The API key is added in Cloud Mode settings.
+CSV with a short summary per declaration.
+CSV listing found risks/facts.
+Cloud host must start with http:// or https://
+Cloud provider
+DEBUG settings
+Debug-only mode: saves pipeline artifacts into case folders under the audit directory.
+DeclaratorLM uses Ollama to:
+DeclaratorLM can download declarations from the open NAZK API on its own.
+DeclaratorLM in turn:
+DeclaratorLM supports two ways to run AI models.
+JSON for the model. Context for humans.
+JSON in. Questions out.
+JSON was never meant for an archive.
+Ollama Cloud is a good fit for first getting to know DeclaratorLM.
+Ollama is an app for running AI models locally on your computer.
+OpenRouter host must start with http:// or https://
+OpenRouter is a service for accessing AI models via an API.
+OpenRouter) for declaration analysis.
+Request payload for /api/chat
+System (dossier)
+System (pipeline)
+User template (dossier)
+User template (pipeline)
+[COMPARE] Comparison mode disabled.\n
+[DEBUG] Dossier summary was not applied to the HTML.\n
+[DEEP] Left deep-research mode. Restored standard paths.\n
+[ERROR]
+[ERROR] Comparison needs at least 2 unique models.\n
+[in development]
+\n=== [COMPARE] Starting model comparison (one declaration) ===\n
+\n=== [DEBUG] Requesting dossier summary from HTML… ===\n
+\n=== [REPORT] Regenerating reports from JSONL (HTML + CSV) ===\n
+\n=== [WIPE] Request to wipe usage traces ===\n
+pywebview API did not appear in time (no load_settings).
+pywebview API is unavailable.
+“Dossier mode”
+“dossier”
+Ignore
+Risk indicators
+Sometimes what matters looks ordinary.
+Sometimes asking is enough.
+Sometimes questions matter more than answers.
+A tool for systematic data matching.
+Tools
+Intelligent declaration analysis.
+Interactive HTML table with analysis results.
+Existing folder
+Auto
+Automated attention to detail.
+We automate what used to be ignored.
+Auto-rotate tiles
+Local Ollama API address.
+Assets
+Alternative: OpenRouter
+Industrial-scale declaration analysis.
+Analysis is about connections.
+A→Z
+A→Z (a→z)
+Risk score
+Risk score (left 0–100) · Findings, red flags (right, count)
+Balance: (enter key)
+Balance: —
+Balance: …
+Safe stop — waiting for the current declaration...
+Liabilities
+More declarations. Fewer blind spots.
+More context. Less noise.
+DELETE
+Validating settings...
+Enter it in Ollama Cloud settings
+Big data loves automation.
+Already on disk
+Log view
+Panel view
+Looks clean. Sounds odd.
+Declaration type
+Wipe traces: error
+Deleting…
+Delete forever
+Wipe usage traces
+Exit dossier mode
+Running
+Models used
+Disable comparison
+Disable comparison mode
+Enter an API key.
+Enter a Cloud host.
+Enter a Cloud model.
+Enter an OpenRouter API key (sk-or-v1-...).
+Enter an OpenRouter host.
+Enter an OpenRouter model.
+Enter a declaration_id.
+Enter a valid positive user_declarant_id.
+Set the declarations folder in Main settings.
+Enter a destination folder.
+Tabs
+It is still at the bottom left.
+It believed in you from the start.
+It is small. Blue. Important.
+It does not move. You are moving toward the inevitable.
+Filter by declaration year
+Manually pick JSON files from the declarations folder (queue is only those; order matches the selection list).
+Everything looks simple. Not everything is.
+Everything is correct. Almost.
+It all adds up. But it does not add up.
+It all adds up… in the wrong direction.
+Install Ollama
+From JSON to a fuller picture.
+From declaration to interpretation.
+Open report_table.html
+Open welcome window
+Open declarations folder
+Open parsing
+Resumed
+It lets you use:
+Welcome window and tips
+Done
+Done on top, in progress below
+Data is already structured. Time to analyze the structure.
+Data is already structured. Time to work with connections.
+Data is open. Meaning is hidden.
+Data piled up for years. Analysis starts now.
+Data synchronized with reality.
+Data shapes context.
+Data → insights → questions.
+Date↑
+Date↓
+Declarator does not get distracted.
+Declarator does not ask questions. It creates them.
+Too many declarations. Too few people.
+Declarations hold more than they seem.
+Declarations went digital before analysis did.
+Declarations have been digital since 2016. Analysis only just caught up.
+Declarations are read. Patterns are gathered.
+Declarations → analysis → context.
+Detailed fetch settings
+Details
+About the app
+Details matter.
+Some patterns need machine-scale attention.
+For most users, cloud mode is easier to start with.
+For private or sensitive documents, Local Mode is recommended.
+An API key is required.
+To work you need:
+Enter an OpenRouter API key to test.
+Help: Ollama
+Help: Ollama Cloud
+Help: OpenRouter
+Help: Run button
+Help: local or cloud mode
+Help: declarations folder
+Help: declaration parsing
+Help: how to set up Cloud mode
+Enough for typical annual declarations.
+Two modes are available:
+Dossier
+Dossier (HTML report)
+Income
+Income, assets, and liabilities on one scale
+More economical
+Live log
+DeclaratorLM works with declaration JSON files.
+Alphabetically
+By modified date
+Ascending
+By size
+Descending
+Loading built-in texts…
+Downloading declarations…
+Downloading declaration…
+Downloading from the NAZK API…
+Downloading a specific declaration by ID
+Loading declaration list…
+Loading statistics…
+Downloaded
+Download
+Download an AI model
+Download from API
+Download declarations in dossier mode to build charts.
+Completed
+Completed with errors
+Close
+Keeps duplicate results for the same declaration (from different runs) in the report.
+Saved vs manual review
+Querying the NAZK API…
+A several-times larger request → analysis takes longer and costs more.
+Starting the next declaration queue…
+Starting pipeline…
+Run
+Start Ollama before analysis
+Start analysis
+Run analysis to accumulate data.
+Apply to session
+Save and enable
+Saving
+Saved
+Keep duplicate declarations in the report
+Coincidences do not exist. Patterns do.
+Raise token limit
+All-time overview
+Normal mode: deep research off.
+Normal mode: comparison off.
+Sound on completion
+Reports updated (HTML + CSV)
+Generate an API key in settings
+Generate dossier summary
+Land
+Found
+Findings
+Meaning appears in context.
+It all adds up again. Strange.
+Got it
+Stopping...
+Querying the model…
+Cards
+Catalog
+Run button
+The Run button is at the bottom left.
+Every declaration has a history.
+Every number has an author.
+Compact mode: raw JSON steps are added to the compact structure — fuller, but more tokens.
+Compact mode: compact structure only — fewer tokens and faster analysis (default).
+Compact declaration
+Context decides more than numbers.
+Context connects separate facts.
+Context shapes conclusions.
+Context-oriented declaration analysis.
+Copy
+Root directory for audit-mode artifacts.
+Useful for complex years, amendment declarations, and rare steps where details matter.
+Sort criterion
+Where to store analysis errors as JSONL.
+Where to store analysis results as JSONL.
+Count
+Finding count
+Count must be at least 1.
+Model count
+Welcome to DeclaratorLM
+Legend says pressing it starts declaration analysis.
+Log
+Log copied to clipboard
+Local or cloud mode
+Local mode
+People see cases. The system sees arrays.
+People see documents. The system sees behavior.
+People get tired. Declarator does not.
+People sleep. The pipeline does not.
+Property (count)
+Max response size
+Max request size
+Maximum model response size.
+Maximum declaration text size sent to the model.
+Maximum 500 declarations per run.
+A small blue button waits patiently.
+Bulk declaration search by year and text query
+Scale is no longer a problem.
+Less trust. More analysis.
+Attempt/error/timing metadata
+We do not trust. We verify.
+Bulk parsing
+Model
+The model sees all fields and original wording — nothing is “lost” when compressing.
+Unlike local mode:
+At this step the app:
+Name of the local Ollama LLM used for analysis.
+Highest risk
+Smallest request → fastest and cheapest in tokens.
+Most common finding types
+Cloud mode settings
+Request settings
+Configure 2–4 different models for comparison
+Nothing is being processed right now…
+Science has not disproven this yet.
+Failed to load statistics.
+Could not open the declarations folder.
+Could not fetch balance
+Not by chance.
+Not every declaration lies. But every one is worth checking.
+Nothing to dig into. Unless you dig.
+No ready files?
+No models for this query
+Real estate
+Real estate, cars, and land plots
+Normalized analysis
+Nothing personal. Just analysis.
+Nothing suspicious. If you do not think.
+Pick 2–4 different models.
+Pick an OpenRouter model in Cloud mode (header or Cloud).
+Pick a folder from the list.
+Pick a model in Cloud Mode
+Choose folder
+Choose an existing report_table.html
+Processing...
+Processed:
+One declaration
+One declaration = one JSON file.
+Separate Done and In progress tabs
+Refresh OpenRouter balance
+Refresh OpenRouter balance (/credits)
+Refresh list
+Refresh OpenRouter model list
+Refresh cloud model list
+Refresh model list from Ollama
+Refresh model list for the current provider
+Updating charts…
+Optimal for batch-processing dozens of files in a row.
+Options
+Original declaration (raw)
+Main settings
+Last session
+Coverage by year
+Risk assessment
+Clear
+Waiting for declarations…
+Waiting to start
+COMPARE
+Analysis pipeline
+Pipeline finished, but some files had errors
+Pipeline completed successfully
+Folder
+Declarations folder
+Folder with declarations
+Processed folder
+Destination folder
+Folder used as the source of declarations to process.
+Folders will remain
+Parallel:
+Parsing
+Declaration parsing
+Declaration parsing (NAZK)
+Pause
+Pause in seconds between retries.
+Retry delay
+Pause after the current declaration...
+Cloud mode advantages:
+Advantages:
+Payload size limit exceeded
+Checking folder…
+Checking connection...
+Checking...
+Review settings before starting
+We are checking.
+Report regeneration: error
+Regenerate HTML + CSV
+Toggle
+Toggle tile visibility
+Move processed JSON
+Questions appear gradually.
+Return to DeclaratorLM and click the Cloud button in the top bar.
+Retry
+Retries
+Show filters
+Show system load
+Show rotating slogans in the header.
+Shows THINK_EVENT in visual-log cards and adds [THINK] to the text log during the pipeline.
+Shows CPU, RAM, and GPU load in the header.
+No findings in the JSONL yet.
+Step-by-step: get a free API key
+Error
+Failed to load dossier charts
+Failed to load statistics
+Save error
+Processing error
+Check failed
+Errors (JSONL)
+Processing order for all files in the folder: by name, by modified date, or by size (when manual selection is off).
+File order
+Comparison
+Model comparison (debug)
+Model comparison finished
+Model comparison finished with an error
+Model comparison: starting…
+Model comparison: error
+Position
+Start with
+Search by workplace
+Search by workplace…
+Search by position
+Search by position…
+Search by file name or full name
+Search by file name or full name…
+Pattern search — at industrial scale.
+Search must be at most 255 characters.
+Search — at least 3 characters (NAZK API limit).
+Search query
+Compact-mode explanations
+Example models:
+Hide WIP
+Hide detailed settings
+About DeclaratorLM
+Resume
+Session prompts updated. Repository originals were not changed.
+Public NAZK declarations are usually safe to process in Cloud Mode.
+Connecting to the NAZK API…
+Dossier summary (debug)
+Dossier summary (debug) ready
+Dossier summary (debug): error
+An approach built around data.
+After you pick a folder, the system finds all declarations inside and prepares them for analysis.
+After signing in, open Settings (profile settings, usually top-right).
+When analysis finishes, open the report with the button next to Run.
+After success, moves JSON into the processed folder.
+Edit prompts (session only, debug)
+Edit prompt
+Audit mode
+Audit mode (debug)
+Card display mode
+Dossier mode
+Compact mode
+Ollama connection mode
+Operating modes:
+Results (JSONL)
+Size↑
+Size↓
+Parsed model response
+Risk-level distribution
+Advanced settings
+Declaration year
+A solution for industrial-scale analysis.
+I will figure it out, thanks
+Average risk score
+Raw /api/chat response
+The system no longer knows how to explain the Run button.
+A decision-support system for analysts.
+A systematic approach to checking declarations.
+Cancel
+Reset to built-ins
+How many times to retry the request on failure.
+How many seconds to wait for the model on one request.
+How many files to process per run.\n0 means process all.
+Everyone leaves traces. Not everyone sees them.
+No usage traces found
+Sorting
+Sort ascending
+Sort descending
+List
+Model list
+Largest first
+Smallest first
+Newest first
+Oldest first
+On the right — the analysis log and pipeline events.
+Processing status
+Build tabular reports
+Creates CSV and HTML reports after analysis.
+Stop
+Data structure should work for analysis.
+Structure helps you see more.
+Structure. Analysis. Conclusions.
+A structured approach to complex data.
+Structured data opens new analysis opportunities.
+Structured data. Scalable analysis.
+Hide filters
+You can hide. You cannot erase.
+Successfully processed JSON files are moved here (except in deep research).
+The same small blue button at the bottom left.
+Table (HTML)
+Timeout (sec)
+Yes, this is more information about the Run button.
+What repeats deserves attention.
+What repeats shapes context.
+Text
+Editor text reset to built-ins; active session overrides disabled.
+Document type
+Everything here is correct. And that is wrong.
+Not applied in dossier mode — declarations stay in the research folder.
+Queue without downloading
+Attention is no longer limited by a human.
+Attention to detail scales.
+Attention is a matter of scale.
+Attention, scaled by technology.
+Sign in to Ollama
+Enable
+Enable Cloud Mode?
+Enable “Filter by declaration year” or enter a search.
+Total processed
+All visible rows
+All files are saved as JSON and ready for further AI analysis.
+Output files
+Files in the declarations folder
+Files:
+Building…
+List filters
+Finances (UAH)
+Cloud mode
+Ollama host
+Someone counted on this never being checked.
+These can be:
+Analysis time
+Processing time
+Some answers sit between the lines.
+Red flags count
+Red flags
+Does this cost money?
+The cleaner it looks, the more interesting it is.
+Read less. Understand more.
+Read this by hand? No thanks.
+Reading deep_research…
+Artifact save path
+No sessions yet.
+No processed declarations yet…
+What you need to do:
+What is compact mode
+What is this anyway?
+To get started:
+How to set up Cloud mode
+If questions appear — we are on the right track.
+If it feels uncomfortable — it is working.
+Z→A
+Z→A (z→a)
+or export from other tools
+high
+install locally.
+from 3 characters
+relative or absolute path within the project
+it will not show fully.
+ready
+declarations
+declaration
+declarations
+finished
+critical
+M
+e.g. 2219565
+e.g. 9f4f0f34-....
+low
+computing…
+waiting…
+slowly and often with worse quality.
+error
+errors
+search
+years
+year
+medium
+k
+success
+active filters
+and sign up.
+— Select a model —
+— paste the key here
+— no folders with decl_*.json —
+— choose a folder —
+↪ moved
+⚠️ DeclaratorLM is a little afraid of you now.

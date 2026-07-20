@@ -1,0 +1,32 @@
+# Local secrets and UI state
+settings.json
+.declarator_secrets.json
+.run_control.json
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Runtime outputs
+analysis_results.jsonl
+analysis_errors.jsonl
+report_summary.csv
+report_findings.csv
+report_table.html
+debug-*.log
+
+# Build
+build/
+dist/
+declarator-lm/node_modules/
+declarator-lm/dist/
+
+# Data (large / sensitive)
+dataset_declarations/
+dataset_declarations_done/
+nazk_parser/dataset_declarations0/
+deep_research/
+audit/
+audit_mode/

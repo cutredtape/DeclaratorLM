@@ -1,0 +1,180 @@
+The API key is added in Cloud Mode settings.
+DEBUG settings
+DeclaratorLM uses Ollama to:
+DeclaratorLM can download declarations from the open NAZK API on its own.
+DeclaratorLM in turn:
+DeclaratorLM supports two ways to run AI models.
+Ollama Cloud is a good fit for first getting to know DeclaratorLM.
+Ollama is an app for running AI models locally on your computer.
+OpenRouter is a service for accessing AI models via an API.
+OpenRouter) for declaration analysis.
+System (dossier)
+System (pipeline)
+User template (dossier)
+User template (pipeline)
+[in development]
+“Dossier mode”
+“dossier”
+Ignore
+Tools
+Existing folder
+Alternative: OpenRouter
+Enter it in Ollama Cloud settings
+Already on disk
+Wipe usage traces
+Tabs
+It is still at the bottom left.
+It believed in you from the start.
+It is small. Blue. Important.
+It does not move. You are moving toward the inevitable.
+Install Ollama
+Open parsing
+It lets you use:
+About the app
+For most users, cloud mode is easier to start with.
+For private or sensitive documents, Local Mode is recommended.
+An API key is required.
+To work you need:
+Enough for typical annual declarations.
+Two modes are available:
+Dossier
+Dossier (HTML report)
+Live log
+DeclaratorLM works with declaration JSON files.
+Alphabetically
+By modified date
+By size
+Loading built-in texts…
+Downloading a specific declaration by ID
+Loading declaration list…
+Loading statistics…
+Downloaded
+Download
+Download an AI model
+Download from API
+Download declarations in dossier mode to build charts.
+Close
+A several-times larger request → analysis takes longer and costs more.
+Starting the next declaration queue…
+Run
+Start Ollama before analysis
+Start analysis
+Run analysis to accumulate data.
+Apply to session
+Raise token limit
+All-time overview
+Generate an API key in settings
+Found
+Got it
+Cards
+Catalog
+The Run button is at the bottom left.
+Copy
+Useful for complex years, amendment declarations, and rare steps where details matter.
+Count
+Finding count
+Model count
+Welcome to DeclaratorLM
+Legend says pressing it starts declaration analysis.
+Log
+Local mode
+A small blue button waits patiently.
+Bulk declaration search by year and text query
+Bulk parsing
+The model sees all fields and original wording — nothing is “lost” when compressing.
+Unlike local mode:
+At this step the app:
+Smallest request → fastest and cheapest in tokens.
+Most common finding types
+Cloud mode settings
+Request settings
+Nothing is being processed right now…
+Science has not disproven this yet.
+Failed to load statistics.
+No ready files?
+No models for this query
+Pick a model in Cloud Mode
+Processed:
+One declaration
+One declaration = one JSON file.
+Refresh list
+Updating charts…
+Optimal for batch-processing dozens of files in a row.
+Options
+Main settings
+Risk assessment
+Clear
+COMPARE
+Analysis pipeline
+Folder
+Destination folder
+Folders will remain
+Parsing
+Declaration parsing (NAZK)
+Cloud mode advantages:
+Advantages:
+Payload size limit exceeded
+Return to DeclaratorLM and click the Cloud button in the top bar.
+Retry
+No findings in the JSONL yet.
+Step-by-step: get a free API key
+Comparison
+Model comparison (debug)
+Position
+Start with
+Search query
+Example models:
+About DeclaratorLM
+Resume
+Public NAZK declarations are usually safe to process in Cloud Mode.
+Dossier summary (debug)
+After you pick a folder, the system finds all declarations inside and prepares them for analysis.
+After signing in, open Settings (profile settings, usually top-right).
+When analysis finishes, open the report with the button next to Run.
+Edit prompts (session only, debug)
+Edit prompt
+Audit mode (debug)
+Dossier mode
+Compact mode
+Operating modes:
+Risk-level distribution
+Advanced settings
+Declaration year
+I will figure it out, thanks
+The system no longer knows how to explain the Run button.
+Cancel
+Reset to built-ins
+Sorting
+List
+On the right — the analysis log and pipeline events.
+Stop
+The same small blue button at the bottom left.
+Yes, this is more information about the Run button.
+Text
+Not applied in dossier mode — declarations stay in the research folder.
+Queue without downloading
+Sign in to Ollama
+Enable
+Enable Cloud Mode?
+Total processed
+All files are saved as JSON and ready for further AI analysis.
+Output files
+Files in the declarations folder
+Cloud mode
+These can be:
+Processing time
+Does this cost money?
+Reading deep_research…
+No sessions yet.
+What you need to do:
+What is compact mode
+What is this anyway?
+To get started:
+or export from other tools
+install locally.
+it will not show fully.
+slowly and often with worse quality.
+and sign up.
+— paste the key here
+↪ moved
+⚠️ DeclaratorLM is a little afraid of you now.

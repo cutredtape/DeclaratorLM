@@ -1,0 +1,7 @@
+# DeclaratorLM — залежності Python (webview, метрики в UI, nazk_parser — лише stdlib)
+# Встановлення: python -m pip install -r requirements.txt
+
+pywebview>=4.0,<6
+psutil>=5.9,<8
+# Windows: бекенд edgechromium у pywebview використовує .NET через pythonnet (import clr)
+pythonnet>=3.0.1,<4
