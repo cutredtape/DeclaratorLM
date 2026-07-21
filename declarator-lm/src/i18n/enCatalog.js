@@ -34,7 +34,7 @@ export const enCatalog = {
   "[DEEP] Вихід із режиму глибокого дослідження. Повернуто стандартні шляхи.\\n": "[DEEP] Left deep-research mode. Restored standard paths.\\n",
   "[ПОМИЛКА]": "[ERROR]",
   "[ПОМИЛКА] Для порівняння потрібно щонайменше 2 унікальні моделі.\\n": "[ERROR] Comparison needs at least 2 unique models.\\n",
-  "[в розробці]": "[in development]",
+  "[бета-версія]": "[beta]",
   "\\n=== [COMPARE] Запуск порівняння моделей (одна декларація) ===\\n": "\\n=== [COMPARE] Starting model comparison (one declaration) ===\\n",
   "\\n=== [DEBUG] Запит підсумку досьє по HTML… ===\\n": "\\n=== [DEBUG] Requesting dossier summary from HTML… ===\\n",
   "\\n=== [REPORT] Перегенерація звітів з JSONL (HTML + CSV) ===\\n": "\\n=== [REPORT] Regenerating reports from JSONL (HTML + CSV) ===\\n",

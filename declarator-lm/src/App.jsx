@@ -6,7 +6,7 @@ import DossierPanel, { DossierProgressStrip, dossierProgressMeta } from "./Dossi
 import "./index.css";
 
 /** Version shown in the header and in "About the program". */
-const APP_UI_VERSION = "closed test v0.90";
+const APP_UI_VERSION = "v0.90";
 
 /** Header taglines (random pick on startup, if enabled in "About the program"). */
 const HEADER_TAGLINES = [
@@ -1739,11 +1739,11 @@ function AboutProgramModal({ onClose, onOpenWelcome, showHeaderTaglines, onShowH
               Зроблено Олександром Матвієнко.
               <br />
               Зворотний зв’язок:{" "}
-              <a href="mailto:matvioleksandr@gmail.com">matvioleksandr@gmail.com</a>
+              <a href="mailto:ctrlredtape@gmail.com">ctrlredtape@gmail.com</a>
             </p>
           </div>
           <p className="about-program-meta">
-            Статус: <span className="about-program-status">[в розробці]</span>
+            Статус: <span className="about-program-status">[бета-версія]</span>
             {" · "}
             Версія: <code className="deep-research-code about-program-version">{APP_UI_VERSION}</code>
           </p>

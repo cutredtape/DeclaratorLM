@@ -1,289 +1,227 @@
-# Raw → Compact: інтерпретація кроків NAZK
+# Raw → Compact v2: як інтерпретуються кроки НАЗК
 
-Джерело логіки: `compact_declaration()` у [`main.py`](main.py) (рядки 183–434).
-
-Корпус для частот: **14** пар `raw_declaration.json` ↔ `compact_declaration.json` у `./compact` (див. також [`compactplus_findings.md`](compactplus_findings.md)).
+Джерело істини — `compact_declaration()` і сусідні функції у [`main.py`](main.py) (приблизно рядки 246–908). Цей документ пояснює, **що саме код робить** із сирою декларацією, крок за кроком. Якщо ви адаптуєте проєкт під інший формат даних — почніть звідси (див. [«Адаптація під іншу країну»](#adaptation) в кінці).
 
 ---
 
-## Як влаштований compact
+## 1. Що таке compact v2
 
-Compact — це **не стиснення** raw, а **два шари**:
+Сира декларація НАЗК — це ~11 тис. символів технічного JSON: 18 «кроків» форми, внутрішні коди, службові поля, PII-плейсхолдери, посилання на осіб через числові `id`. Compact v2 — **не просто стиснення**, а перепакування в кілька шарів, зручних для мовної моделі:
 
 | Шар | Ключі | Призначення |
-|-----|--------|-------------|
-| **Structured** | `meta`, `quick_totals`, `step_0_interpreted`, `family_members`, `real_estate`, … | Вручну відібрані поля для аналізу ШІ |
-| **Extras** | `raw_extras` | Непокриті кроки (5,7,8,10,16): очищені від шуму + `person_resolved`, `holders_resolved`, `rights_summary` |
-| **Legacy payload** | `all_nonempty_steps_payload` | Опційно (`--compact-legacy-payload`) |
-| **Контекст** | `steps_context` | Булева карта наявності кроків |
+|-----|-------|-------------|
+| **Structured** | `meta`, `quick_totals`, `step_0_interpreted`, `family_members`, `real_estate`, `vehicles`, … | 13 кроків, розкладені на вручну відібрані, значущі для аналізу поля |
+| **Raw extras** | `raw_extras` | 5 непокритих кроків (5, 7, 8, 10, 16), очищені від шуму й **збагачені** (розв'язані імена/права) — додаються **лише якщо непорожні** |
+| **Steps context** | `steps_context` | Скільки й які кроки декларації непорожні |
+| **Legacy payload** | `all_nonempty_steps_payload` | Опційно (режим **«Детальніше»** / `--compact-legacy-payload`): повна сира копія всіх непорожніх кроків «як є» |
 
-Середній розмір: raw ~11 409 симв., compact ~14 182 симв. (~74% compact — payload).
-
----
-
-## Зведена таблиця (кроки 0–17)
-
-| Крок | Зміст (NAZK) | Structured-секція | Інтерпретується? | Деталізація | Стабільність | Непорожній у корпусі |
-|------|--------------|-------------------|------------------|-------------|--------------|----------------------|
-| **0** | Загальні відомості про декларацію | `step_0_interpreted` + частина `meta` | **Так** (коди → мітки) | Часткова | Середня | 14/14 |
-| **1** | Особисті дані суб’єкта | `meta.declarant` | **Так** (5 полів) | Мінімальна | Висока для збережених полів | 14/14 |
-| **2** | Члени сім’ї | `family_members` | **Так** (1:1 поля) | Повна | Висока | 14/14 |
-| **3** | Нерухоме майно | `real_estate` | **Так** (rights → `owners_or_users`) | Часткова | Середня | 14/14 |
-| **4** | Незавершене будівництво | `unfinished_construction` | **Так** | Часткова | Не перевірено* | 0/14 |
-| **5** | Цінне рухоме майно | — | **Ні** | — | — | 0/14 |
-| **6** | Транспорт | `vehicles` | **Так** | Часткова | Висока | 13/14 |
-| **7** | Цінні папери | — | **Ні** | — | — | 0/14 |
-| **8** | Корпоративні права (участь у капіталі) | — | **Ні** | — | — | 0/14 |
-| **9** | Корпоративні права (бенефіціар) | `corporate_rights` | **Так** | Часткова | Не перевірено* | 0/14 |
-| **10** | Нематеріальні активи | — | **Ні** | — | — | 0/14 |
-| **11** | Дохід | `incomes` | **Так** | Повна / висока | Висока | 14/14 |
-| **12** | Грошові активи | `cash_assets` | **Так** | Часткова | Обмежено перевірено | 1/14 |
-| **13** | Фінансові зобов’язання | `liabilities` | **Так** | Часткова | Не перевірено* | 0/14 |
-| **14** | Істотні зміни | `major_changes` | **Так** | Повна (обрані поля) | Не перевірено* | 0/14 |
-| **15** | Витрати за угодами | `expenses` | **Так** | Часткова | Не перевірено* | 0/14 |
-| **16** | Додатковий блок форми | — | **Ні** | — | — | 0/14 |
-| **17** | Фінансові установи / рахунки | — | **Ні** | — | **Критичний прогалина** | **11/14** |
-
-\* Код structured є, але у корпусі з 14 декларацій крок не зустрічався непорожнім — поведінка на реальних даних не верифікована.
-
-Додатково з усіх кроків з доходами/майном будуються **`quick_totals`** (суми через `safe_float`).
+Результат — компактний, читабельний JSON, де зміст декларації збережено, а технічне сміття прибране.
 
 ---
 
-## Інтерпретовані кроки (деталі)
+## 2. Покриття кроків (0–17)
 
-### step_0 — загальні відомості
+Множина покритих кроків задана прямо в коді:
 
-**Куди:** `step_0_interpreted`, дублікати кодів у `meta` (рік, тип з верхнього рівня raw).
-
-**Що робиться:**
-- `declarationType` → `declaration_type_code` + `declaration_type_label` (мапа: 1–4 + `changes` → «Декларація змін»).
-- Якщо є `changesYear` (або `type=2` при змінах) — код `changes`; значення `declaration_type=0` ігнорується.
-- Роки періоду: `declarationYear1`, `declarationYearFrom/To`, `declarationYear4`, `changesYear`.
-- `continue_perform_functions` → код + мітка («продовжує / не продовжує…»).
-- З верхнього рівня raw: `responsible_position`, `post_type`, `post_category`, `corruption_affected`.
-
-**Втрати:** інші поля `step_0.data`, якщо є поза переліченим.
-
-**Стабільність — покращена:** декларації змін (`changesYear`) отримують мітку «Декларація змін»; невалідний `declaration_type=0` не блокує fallback.
-
----
-
-### step_1 — суб’єкт декларування
-
-**Куди:** `meta.declarant`.
-
-**Зберігаються:** `lastname`, `firstname`, `middlename`, `workPlace`, `workPost`.
-
-**Втрати:** ~65 інших ключів raw (адреси, `*Path`, `taxNumber`, `passport`, `unzr`, `birthday`, `_extendedstatus` тощо). У корпусі більшість — плейсхолдери `[Конфіденційна інформація]` / `[Не застосовується]`.
-
-**Стабільність — висока** для антикорупційно релевантних полів (`workPlace`, `workPost`); навмисне відсікання PII.
-
----
-
-### step_2 — члени сім’ї
-
-**Куди:** `family_members[]`.
-
-**Поля:** `id`, `subjectRelation`, `lastname`, `firstname`, `middlename`.
-
-**Також:** `id` → індекс для `resolve_right_holders()` (`person_index`).
-
-**Стабільність — висока:** прямий перенос без трансформацій; дубль у payload.
-
----
-
-### step_3 — нерухомість
-
-**Куди:** `real_estate[]`.
-
-**Поля:** `objectType`, `totalArea`, `owningDate`, `cost_date_assessment`, `owners_or_users`, `rights_summary[]`, `location` (region/district/city з `*_txt`, без конфіденційних адрес).
-
-**Трансформація:** `rights[]` → `owners_or_users[]` + `rights_summary[]` (`holder`, `ownership_type`, `other_ownership`, `percent_ownership`). `rightBelongs=j` → ПІБ/назва з `ua_*` / `ua_company_name` в об’єкті права.
-
-**Стабільність — висока** для власників і типу права; PII-адреси лишаються плейсхолдерами в raw.
-
----
-
-### step_4 — незавершене будівництво
-
-**Куди:** `unfinished_construction[]`.
-
-**Поля:** `objectType`, `totalArea`, `owningDate`, `owners_or_users` (без `cost_date_assessment` на відміну від step_3).
-
-**Стабільність:** та сама логіка прав, що step_3; **не перевірено на даних** (0/14 у корпусі).
-
----
-
-### step_6 — транспорт
-
-**Куди:** `vehicles[]`.
-
-**Поля:** `objectType`, `brand`, `model`, `graduationYear`, `owningDate`, `costDate`, `owners_or_users`.
-
-**Стабільність — висока** для основних атрибутів; права — як у step_3.
-
----
-
-### step_9 — корпоративні права (бенефіціар)
-
-**Куди:** `corporate_rights[]`.
-
-**Поля:** `legalForm`, `company_name` (`company_name_beneficial_owner` або `name`), `company_code`, `country`, `owners` (з `person_who_care[]` або scalar `person` через `person_index`).
-
-**Стабільність — висока** для обох форматів NAZK (старий `name`/`person` і новий beneficial_owner).
-
----
-
-### step_11 — дохід
-
-**Куди:** `incomes[]` + `quick_totals.income_total_uah_estimated`.
-
-**Поля:** `objectType`, `sizeIncome`, `sources`, `person_who_care` (масив рядків ПІБ/ролей через `person_index`, не сирі `{person: id}`).
-
-**Стабільність — висока:** ключові суми та джерела збережені; сума через `safe_float` (пробіли, коми нормалізуються).
-
----
-
-### step_12 — грошові активи
-
-**Куди:** `cash_assets[]` + `quick_totals.cash_assets_total_estimated`.
-
-**Поля:** `objectType`, `assetsCurrency`, `sizeAssets`, `owners_or_users`.
-
-**Стабільність:** логіка прав як у нерухомості; у корпусі **1/14**.
-
----
-
-### step_13 — зобов’язання
-
-**Куди:** `liabilities[]` + `quick_totals.liabilities_total_estimated`.
-
-**Поля:** `objectType`, `sizeObligation`, `currency`, `owners` ← `person_who_care[].person`.
-
-**Відмінність від step_3/6/12:** `owners`, не `owners_or_users`; без `resolve_right_holders`.
-
-**Стабільність:** **0/14** у корпусі.
-
----
-
-### step_14 — істотні зміни
-
-**Куди:** `major_changes[]`.
-
-**Поля:** `specExpenses`, `specExpensesSubject`, `transactionDate`, `specConsequencesSubject`, `expenses`.
-
-**Стабільність:** **0/14** у корпусі.
-
----
-
-### step_15 — витрати
-
-**Куди:** `expenses[]`.
-
-**Поля:** `description`, `paid`, `emitent` ← `emitent_ua_company_name` **або** `emitent_citizen`.
-
-**Стабільність:** **0/14** у корпусі.
-
----
-
-## Неінтерпретовані кроки (лише payload)
-
-Якщо крок непорожній, він потрапляє **лише** в `all_nonempty_steps_payload.step_N` — byte-to-byte копія `data.step_N.data`.
-
-| Крок | Типовий зміст | Ризик при видаленні payload |
-|------|---------------|-----------------------------|
-| **5** | Цінне рухоме майно (коштовності, мистецтво тощо) | Втрата всього змісту, якщо з’явиться у декларації |
-| **7** | Цінні папери | Те саме |
-| **8** | Участь у статутному капіталі | Те саме |
-| **10** | Нематеріальні активи | Те саме |
-| **16** | Додатковий блок форми | Те саме |
-| **17** | **Банки / фінустанови, рахунки** | **11/14** декларацій; **єдиний канал** для антикорупційного аналізу банків |
-
-### step_17 — критична прогалина
-
-Типові поля в payload (приклад з корпусу):
-
-- `establishment_ua_company_name`, `establishment_ua_company_code`, `establishment_type`
-- `person_open_account`, `person_who_care`, `persons_has_accounts`
-- службові: `iteration`, `*_extendedstatus`
-
-**Structured-аналога немає.** Рекомендація (з [`compactplus_findings.md`](compactplus_findings.md)): додати `financial_institutions[]` перед скороченням payload.
-
----
-
-## Спільні механізми інтерпретації
-
-### `resolve_right_holders(rights)`
-
-```212:224:main.py
-    def resolve_right_holders(rights: Any) -> List[str]:
-        holders: List[str] = []
-        for right in as_list(rights):
-            ...
-            if key in person_index:
-                holders.append(person_index[key])
-            elif key:
-                holders.append(f"Особа id={key}")
-            elif right.get("citizen"):
-                holders.append(str(right.get("citizen")))
-        return holders
+```python
+COMPACT_COVERED_STEP_NUMBERS = frozenset({0, 1, 2, 3, 4, 6, 9, 11, 12, 13, 14, 15, 17})
 ```
 
-| Умова | Результат | Стабільність |
-|-------|-----------|--------------|
-| `rightBelongs` ∈ person_index | «Стать: ПІБ» або «Суб'єкт декларування» | Стабільно |
-| `rightBelongs` поза індексом | `"Особа id=…"` | Нестабільно для аналізу |
-| лише `citizen` | рядок citizen | Залежить від формату NAZK |
-| `ua_lastname` / інші ua_* без citizen | **ігноруються** | Втрата |
+**13 із 18 кроків** мають окрему структуровану секцію. Решта 5 (кроки 5, 7, 8, 10, 16) потрапляють у `raw_extras`, якщо непорожні.
 
-Застосовується: step_3, step_4, step_6, step_12. **Не** застосовується: step_13, step_9 (інша схема `person_who_care`).
+| Крок | Зміст (НАЗК) | Структуровано? | Куди в compact |
+|------|--------------|:--------------:|----------------|
+| **0** | Загальні відомості про декларацію | ✅ | `step_0_interpreted` + `meta` |
+| **1** | Особисті дані суб'єкта | ✅ | `meta.declarant` (5 полів) |
+| **2** | Члени сім'ї | ✅ | `family_members` |
+| **3** | Нерухоме майно | ✅ | `real_estate` |
+| **4** | Незавершене будівництво | ✅ | `unfinished_construction` |
+| **5** | Цінне рухоме майно | ⬜ | `raw_extras` |
+| **6** | Транспортні засоби | ✅ | `vehicles` |
+| **7** | Цінні папери | ⬜ | `raw_extras` |
+| **8** | Участь у статутному капіталі | ⬜ | `raw_extras` |
+| **9** | Корпоративні права (бенефіціар) | ✅ | `corporate_rights` |
+| **10** | Нематеріальні активи | ⬜ | `raw_extras` |
+| **11** | Доходи | ✅ | `incomes` |
+| **12** | Грошові активи | ✅ | `cash_assets` |
+| **13** | Фінансові зобов'язання | ✅ | `liabilities` |
+| **14** | Істотні зміни в майновому стані | ✅ | `major_changes` |
+| **15** | Витрати за угодами | ✅ | `expenses` |
+| **16** | Додатковий блок форми | ⬜ | `raw_extras` |
+| **17** | Фінансові установи / рахунки | ✅ | `financial_institutions` |
 
-### `safe_float` (quick_totals)
-
-Нормалізує рядкові суми (пробіли, кома → крака). Невалідні значення → `None`, не ламають суму.
-
-### `as_list`
-
-Некоректний тип `data` (не масив) → порожній список → **крок вважається порожнім** у structured, але може бути dict у payload-логіці (рідко).
-
----
-
-## Payload vs structured: що дублюється
-
-| Крок | Structured | Дубль у payload | Безпечно прибрати payload? |
-|------|------------|-----------------|------------------------------|
-| 0 | частково (`step_0_interpreted`) | повний step_0 | Після канонізації step_0 — так |
-| 1 | `meta.declarant` | step_1 | Так (втрати лише шум/PII) |
-| 2 | `family_members` | step_2 | Так |
-| 3 | `real_estate` | step_3 | **Ні без міграції** — structured втрачає `rights[]`, Path, otherOwnership |
-| 6 | `vehicles` | step_6 | Частково — та сама проблема прав |
-| 11 | `incomes` | step_11 | Так для основних полів |
-| 12 | `cash_assets` | step_12 | Частково |
-| 17 | **немає** | step_17 | **Ні** — єдине джерело |
+> ✅ **Крок 17 (банки/рахунки) реалізовано.** В ранніх версіях проєкту він був відомою прогалиною (тільки сирий payload, без структурованого аналога). Тепер `compact_financial_institutions()` будує повноцінну секцію `financial_institutions`, а промпт аналізу явно на неї посилається.
 
 ---
 
-## Оцінка стабільності (підсумок)
+## 3. Структуровані кроки — деталі
 
-| Рівень | Кроки | Коментар |
-|--------|-------|----------|
-| **Висока** | 1 (обрані поля), 2, 11 | Прямий мапінг або навмисний мінімальний набір |
-| **Середня** | 0, 3, 4, 6, 12 | Коди/права/старі формати; ризик втрати деталей ownership |
-| **Невідома (код без даних)** | 4, 9, 13, 14, 15 | Потрібні декларації з непорожніми кроками |
-| **Відсутня (не реалізовано)** | 5, 7, 8, 10, 16, **17** | Лише raw payload; **17 — масовий у корпусі** |
+Для кожного кроку нижче — цільова секція compact і поля, які код відбирає (назви полів — точно з `compact_declaration()`).
+
+### Крок 0 — загальні відомості → `step_0_interpreted` (+ `meta`)
+
+- `declaration_type_code` + `declaration_type_label` — код типу декларації розв'язується через `_resolve_declaration_type_code()`: спершу `step_0.declarationType`, далі fallback на `changesYear` (→ «зміни»), потім на `declaration_type`/`type` верхнього рівня raw. Невалідний `0` не блокує fallback.
+- `period` — `declaration_year`, `from_year`, `to_year`, `year_special`, `changes_year`.
+- `public_service_context` — `continue_perform_functions` (код + мітка), а також `responsible_position`, `post_type`, `post_category`, `corruption_affected` з верхнього рівня raw.
+
+### Крок 1 — суб'єкт декларування → `meta.declarant`
+
+Зберігаються рівно **5 полів**: `lastname`, `firstname`, `middlename`, `work_place` (`workPlace`), `work_post` (`workPost`).
+
+Решта ~65 полів кроку 1 (податковий номер, паспорт, `unzr`, дата народження, адреси, `*Path`, `*_extendedstatus` тощо) **навмисно не переносяться**. Здебільшого у відкритих деклараціях це вже плейсхолдери `[Конфіденційна інформація]` — тобто відсікаються і законом, і кодом.
+
+### Крок 2 — члени сім'ї → `family_members`
+
+Поля: `id`, `subjectRelation`, `lastname`, `firstname`, `middlename`. Крім секції, `id` кожного члена йде в `person_index` для розв'язання власників активів (див. §5).
+
+### Крок 3 — нерухомість → `real_estate`
+
+Поля: `objectType`, `totalArea`, `owningDate`, `cost_date_assessment`, опційно `location` (регіон/район/місто з `*_txt`, **без конфіденційних адрес**), плюс власники через `_asset_rights_fields()` → `owners_or_users` (+ `rights_summary`, якщо є).
+
+### Крок 4 — незавершене будівництво → `unfinished_construction`
+
+Як крок 3, але без `cost_date_assessment`: `objectType`, `totalArea`, `owningDate`, `location?`, `owners_or_users` (+ `rights_summary`).
+
+### Крок 6 — транспорт → `vehicles`
+
+Поля: `objectType`, `brand`, `model`, `graduationYear`, `owningDate`, `costDate`, власники (`owners_or_users` + `rights_summary`).
+
+### Крок 9 — корпоративні права → `corporate_rights`
+
+Через `compact_corporate_rights()`: `legalForm`, `company_name` (з `company_name_beneficial_owner` або `name`), `country`, `owners`, опційно `company_code`. Підтримує і старий, і новий формати НАЗК.
+
+### Крок 11 — доходи → `incomes`
+
+Поля: `objectType`, `sizeIncome`, `sources`, `person_who_care` (список ПІБ/ролей, розв'язаних через `person_index`, а не сирі `{person: id}`).
+
+### Крок 12 — грошові активи → `cash_assets`
+
+Поля: `objectType`, `assetsCurrency`, `sizeAssets`, власники (`owners_or_users` + `rights_summary`).
+
+### Крок 13 — зобов'язання → `liabilities`
+
+Поля: `objectType`, `sizeObligation`, `currency`, `owners` (← `person_who_care`, розв'язані через `person_index`). Відмінність від кроків 3/6/12: тут `owners`, а не `owners_or_users`.
+
+### Крок 14 — істотні зміни → `major_changes`
+
+Поля: `specExpenses`, `specExpensesSubject`, `transactionDate`, `specConsequencesSubject`, `expenses`.
+
+### Крок 15 — витрати → `expenses`
+
+Поля: `description`, `paid`, `emitent` (← `emitent_ua_company_name` **або** `emitent_citizen`).
+
+### Крок 17 — фінансові установи / рахунки → `financial_institutions`
+
+Через `compact_financial_institutions()`: `establishment_ua_company_name`, `establishment_ua_company_code`, `establishment_type`, `person_open_account`, `person_who_care` (розв'язані імена), і `persons_has_accounts` (очищені записи рахунків).
 
 ---
 
-## Наслідки для compactplus
+## 4. Непокриті кроки → `raw_extras`
 
-1. **Не видаляти весь `all_nonempty_steps_payload`** без міграції **step_17** → structured `financial_institutions[]`.
-2. Дублі step_1/2/11 можна прибирати з payload, якщо structured — канон.
-3. step_3/6/12: перед видаленням payload потрібно **розширити structured** (ownershipType, otherOwnership, повні дані третіх осіб) або залишити `rights[]` у structured.
-4. Додати structured для step_5, 7, 8, 10, 16 — якщо ці кроки з’являться у production-корпусі.
+Кроки **5, 7, 8, 10, 16** не мають окремої структурованої секції. Якщо крок непорожній, він проходить через `strip_compact_noise()` (§5) і додається в `raw_extras[step_N]`. Додатково `_enrich_raw_extras()` дописує розв'язані посилання прямо в об'єкти:
 
-Детальні правила cut/wipe: [`compactplus_findings.md`](compactplus_findings.md).
+- `person_resolved` — ПІБ/роль замість числового `person`;
+- `holders_resolved` — власники по кожному запису `rights`;
+- `rights_summary` — стислий опис прав (тип власності, частка тощо).
+
+Тобто навіть «неструктуровані» кроки йдуть до моделі **очищеними й з розв'язаними іменами**, а не сирими. Якщо в конкретній декларації ці кроки критично важливі — режим **«Детальніше»** (§7) додасть ще й повну сиру копію.
 
 ---
 
-*Згенеровано на основі `main.py` та аналізу 14 пар у `./compact`.*
+## 5. Спільні механізми
+
+### `person_index` (`_build_person_index`)
+
+```python
+person_index = {"1": "Суб'єкт декларування"}
+# + кожен член сім'ї з кроку 2:
+# person_index["2"] = "дружина: Іваненко Марія Петрівна"
+```
+
+Основа для розв'язання того, кому належить кожен актив.
+
+### Розв'язання власників (`_resolve_right_holders`)
+
+Для масиву `rights[]`:
+
+| Умова | Результат |
+|-------|-----------|
+| `rightBelongs` ∈ `person_index` | мітка з індексу («дружина: …» / «Суб'єкт декларування») |
+| третя особа (НАЗК ставить `rightBelongs="j"`) | реальні дані з самого об'єкта права: `ua_company_name` (+ код), або `ua_lastname/firstname/middlename`, або `citizen` |
+| є `rightBelongs`, але поза індексом і без inline-даних | `"Особа id=<key>"` |
+| немає `rights`, але є `item.person` / `personWhoHaveRights` | fallback через `person_index` |
+
+### Очищення шуму (`strip_compact_noise`)
+
+Рекурсивно проходить структуру й:
+- **відкидає ключі-шум:** `iteration`, `object_identificationNumber`, `uid`, будь-що на `*_extendedstatus`, `*Path` (коди адміністративного поділу), `*_id` (окрім `id`), `hash*`;
+- **відкидає плейсхолдери:** `[Конфіденційна інформація]`, `[Не застосовується]`, порожні значення;
+- **захищає (ніколи не викидає):** ключі з `COMPACT_PROTECTED_KEYS`, а також усе, що починається на `size`/`cost` чи закінчується на `Date`.
+
+### Мітки локації (`_resolve_location_labels`)
+
+З полів `region_txt`/`district_txt`/`city_txt`/`ua_cityType` будує `location` = регіон/район/місто/тип. Точні адреси (конфіденційні за ст. 47 закону) не переносяться.
+
+### Підсумки (`quick_totals`, `safe_float`)
+
+`safe_float` нормалізує рядкові суми (пробіли, коми → крапки; невалідне → `None`, не ламає суму). З цього рахуються п'ять агрегатів:
+
+- `income_total_uah_estimated` ← сума `sizeIncome`;
+- `cash_assets_total_estimated` ← сума `sizeAssets`;
+- `vehicle_declared_cost_total_estimated` ← сума `costDate`;
+- `realty_declared_cost_total_estimated` ← сума `cost_date_assessment`;
+- `liabilities_total_estimated` ← сума `sizeObligation`.
+
+---
+
+## 6. Повний вихід compact v2 (структура)
+
+```json
+{
+  "meta": { "id", "declaration_year", "declaration_type", "date",
+            "declarant": { "lastname", "firstname", "middlename", "work_place", "work_post" } },
+  "quick_totals": { income / cash / vehicle / realty / liabilities totals },
+  "step_0_interpreted": { "declaration_type_code", "declaration_type_label", "period", "public_service_context" },
+  "steps_context": { "nonempty_steps_count", "nonempty_steps": ["step_0", ...] },
+  "family_members": [...],
+  "real_estate": [...],
+  "vehicles": [...],
+  "incomes": [...],
+  "cash_assets": [...],
+  "major_changes": [...],
+  "unfinished_construction": [...],
+  "liabilities": [...],
+  "corporate_rights": [...],
+  "expenses": [...],
+  "financial_institutions": [...],
+  "raw_extras": { "step_5": {...}, ... }         // лише якщо є непорожні непокриті кроки
+  // "all_nonempty_steps_payload": {...}          // лише в режимі «Детальніше»
+}
+```
+
+---
+
+## 7. Режим «Детальніше» (legacy payload)
+
+Прапорець `--compact-legacy-payload` (перемикач **«Економніше / Детальніше»** в UI) додає до compact ключ `all_nonempty_steps_payload` — **повну сиру копію** всіх непорожніх кроків, точно як в оригінальному JSON реєстру. Модель тоді бачить геть усі поля й формулювання, нічого не «згублено» при стисканні. Запит стає в кілька разів більшим (повільніше й дорожче), тож типово вмикається лише для складних декларацій або коли є підозра, що модель щось не побачила.
+
+---
+
+<a id="adaptation"></a>
+
+## 8. Адаптація під іншу країну
+
+Compact v2 жорстко заточений під схему НАЗК (18 кроків, назви полів, коди зв'язків). Щоб адаптувати проєкт під декларації іншої юрисдикції, змінювати треба переважно **логіку інтерпретації, а не пайплайн**. Ключові точки:
+
+1. **`nazk_parser/`** — клієнт завантаження. Замініть на клієнт вашого джерела даних (API/дамп). Пайплайн (`main.py`), звіти й GUI від джерела не залежать.
+2. **`COMPACT_COVERED_STEP_NUMBERS` + білдери секцій** у `compact_declaration()` — перепишіть під розділи *вашої* форми декларації (нерухомість, доходи, рахунки тощо). Це серце адаптації.
+3. **`_build_person_index` / `_resolve_right_holders`** — під те, як *ваш* формат кодує членів сім'ї та власників активів.
+4. **`strip_compact_noise` (`COMPACT_PROTECTED_KEYS`, ключі-шум)** — під ваші назви полів і те, які поля службові/чутливі.
+5. **`DECLARATION_TYPE_MAP`, `CONTINUE_SERVICE_MAP`** та інші довідники кодів — під ваші коди.
+6. **Промпти (`SYSTEM_PROMPT`, `USER_PROMPT_TEMPLATE`)** — назви секцій у промпті мають збігатися з тими, що ви створюєте в compact; мову аналізу теж можна змінити.
+
+Що адаптувати **не** треба: виклик LLM (Ollama/OpenRouter), нормалізацію відповіді, звіти (`report.py`), графіки, дашборд, GUI — вони працюють з уже нормалізованим результатом і від країни не залежать.
+
+---
+
+*Згенеровано з коду `main.py` (`compact_declaration` та сусідні функції).*
