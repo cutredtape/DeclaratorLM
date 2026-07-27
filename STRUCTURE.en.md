@@ -931,7 +931,7 @@ DeclaratorLM/
 ├── assets/                       # Icons (.ico), sounds (.wav/.mp3)
 ├── build/, dist/, venv/          # Build/EXE artifacts, virtual environment (gitignored)
 │
-├── README.md / README.en.md      # Project overview and roadmap (Ukrainian/English)
+├── README.md / README.uk.md      # Project overview and roadmap (English/Ukrainian)
 ├── STRUCTURE.md / STRUCTURE.en.md # This file (Ukrainian/English)
 └── raw-compact.md                # Step-by-step breakdown of NAZK steps → compact v2 mapping (Ukrainian)
 ```

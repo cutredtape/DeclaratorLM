@@ -930,7 +930,7 @@ DeclaratorLM/
 ├── assets/                       # Іконки (.ico), звуки (.wav/.mp3)
 ├── build/, dist/, venv/          # Артефакти збірки/EXE/віртуальне середовище (.gitignore)
 │
-├── README.md / README.en.md      # Загальний огляд і дорожня карта (укр./англ.)
+├── README.md / README.uk.md      # Загальний огляд і дорожня карта (англ./укр.)
 ├── STRUCTURE.md / STRUCTURE.en.md # Цей файл (укр./англ.)
 └── raw-compact.md                # Покроковий розбір мапінгу кроків НАЗК → compact v2
 ```
