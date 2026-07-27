@@ -1,6 +1,6 @@
 # DeclaratorLM
 
-### 🔍 Reads an asset declaration the way an investigative journalist would — not the way an exhausted human does at 2 a.m.
+### 🔍 Making public declarations actually useful. Because open data deserves better tools.
 
 **What this is.** In Ukraine, officials, MPs, judges, and other public figures file electronic asset declarations with [NAZK](https://public.nazk.gov.ua/public_api) every year — official reports of their wealth, income, and their family's property. These declarations are public. DeclaratorLM takes such a declaration, cleans it, and runs it through AI that looks for signs of corruption: wealth that doesn't match income, assets held by third parties, suspicious patterns. The output is a risk score, concrete findings with evidence, and a link back to the primary source. Built for journalists, anti-corruption researchers, and civic-tech developers who need to triage more declarations than anyone could read by hand. Locally on your own machine, or through cloud models — your choice.
 

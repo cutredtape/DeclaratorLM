@@ -971,7 +971,8 @@ pyinstaller DeclaratorLM.spec
 |--------|-------------|
 | `BUILD_FRONTEND.bat` | Збірка фронтенду (`npm run build`) |
 | `run_en.bat` | Запуск застосунку з англійським інтерфейсом (`DECLARATOR_UI_LANG=en`) |
-| `reasoning.bat` | ⚠️ WIP: запуск із увімкненим reasoning/THINK-стрімінгом (`DECLARATOR_REASONING_DEBUG=1`) |
+
+> ⚠️ **WIP/нестабільно.** Окремого скрипта для reasoning/THINK-стрімінгу немає — активується змінною середовища перед запуском: `set DECLARATOR_REASONING_DEBUG=1 && python webview_app.py` (Windows) чи `DECLARATOR_REASONING_DEBUG=1 python webview_app.py` (bash).
 
 ### 11.4 Python-залежності
 

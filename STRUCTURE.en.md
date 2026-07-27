@@ -972,7 +972,8 @@ pyinstaller DeclaratorLM.spec
 |--------|-------------|
 | `BUILD_FRONTEND.bat` | Builds the frontend (`npm run build`) |
 | `run_en.bat` | Launches the app with the English UI (`DECLARATOR_UI_LANG=en`) |
-| `reasoning.bat` | ⚠️ WIP: launches with reasoning/THINK streaming enabled (`DECLARATOR_REASONING_DEBUG=1`) |
+
+> ⚠️ **WIP/unstable.** There's no dedicated script for reasoning/THINK streaming — enable it via an environment variable before launch: `set DECLARATOR_REASONING_DEBUG=1 && python webview_app.py` (Windows) or `DECLARATOR_REASONING_DEBUG=1 python webview_app.py` (bash).
 
 ### 11.4 Python dependencies
 
