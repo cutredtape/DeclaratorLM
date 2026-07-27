@@ -1,5 +1,8 @@
 /** English UI strings keyed by Ukrainian source text. */
+import { enCatalogExtras } from "./enCatalogExtras";
+
 export const enCatalog = {
+  ...enCatalogExtras,
   " млн": "M",
   " тис": "k",
   " шт.": " pcs.",

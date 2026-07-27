@@ -59,7 +59,7 @@
 
 ## 2. Backend: main.py
 
-**Size:** 3,075 lines. The single entry point for both the GUI (via subprocess) and direct CLI use.
+**Size:** ~3,100 lines. The single entry point for both the GUI (via subprocess) and direct CLI use.
 
 ### 2.1 Prompts
 
@@ -134,7 +134,7 @@ append_jsonl(output_path, result)
 
 **Progress/telemetry for the UI:** a separate structured log channel, `VISUAL_LOG|{json}` (states `PROCESSING`/`OK`/`ERR`/`LIMIT_EXCEEDED` per file), plus `PIPELINE_TOTAL|N`, `PIPELINE_ERR_REVIEW|{...}`, `VISUAL_RUN_TOTALS|{...}` — this is exactly what `VisualLogPanel.jsx` consumes for the card-based live log. At the end of a run, if `--control-file` is set, there's an interactive error-review phase (`_run_error_review_phase`): `retry` / `raise_limits` / `ignore` / `stop` for files that failed to process.
 
-**Reasoning debug (`--reasoning-debug`):** streams Ollama's `/api/chat` with `think:true`, buffers reasoning deltas, and emits `THINK_EVENT|<text>` lines to stdout with debounced flushing (flush at ≥80 chars, on punctuation, or after a 0.7s timeout). Falls back to a non-streaming call if streaming fails. On OpenRouter it's ignored with a warning (the model just gets a normal request).
+**Reasoning debug (`--reasoning-debug`) — ⚠️ WIP, currently frozen and unstable (hence its place in the DEBUG panel's WIP section):** streams Ollama's `/api/chat` with `think:true`, buffers reasoning deltas, and emits `THINK_EVENT|<text>` lines to stdout with debounced flushing (flush at ≥80 chars, on punctuation, or after a 0.7s timeout). Falls back to a non-streaming call if streaming fails. On OpenRouter it's ignored with a warning (the model just gets a normal request).
 
 **OpenRouter pricing/usage:** before running, `main()` fetches live model prices and context limits (`fetch_openrouter_models_enriched`), used both to cap payload size for a given model and to compute per-result token/cost usage (`openrouter_usage` in the output), plus a run-totals cost footer at the end.
 
@@ -194,7 +194,7 @@ Normalizes the raw LLM response into a stable shape:
 | `--audit-mode-dir` | `audit` | Root directory for audit artifacts |
 | `--audit-capture-raw-declaration` and 6 sibling flags | all `False` | Fine-grained control over which artifacts get saved: `-compact-declaration`, `-request-payload`, `-response-raw`, `-response-parsed`, `-normalized-analysis`, `-attempt-meta` |
 | `--on-limit` | `auto-raise-32000` | `auto-raise-32000 \| ask \| skip \| fail-run` — behavior when `--max-chars` is exceeded |
-| `--reasoning-debug` | off | Stream the model's reasoning tokens as `THINK_EVENT` lines on stdout |
+| `--reasoning-debug` | off | ⚠️ WIP/unstable: stream the model's reasoning tokens as `THINK_EVENT` lines on stdout |
 | `--api-key` | `""` | Bearer token for a cloud Ollama endpoint |
 | `--cloud-mode` | off | Cloud-mode flag (logging/UX only) |
 | `--provider` | `ollama` | `ollama \| openrouter` |
@@ -376,7 +376,7 @@ Headers: `HTTP-Referer`, `X-Title`, `Authorization: Bearer`, `User-Agent`.
 
 ## 5. Webview API: webview_app.py
 
-**2,884 lines.** Launches a PyWebView window (1180×820, resizable) with the embedded React SPA. The `Api` class (line 731) — every public (non-underscore) method on it is automatically exposed to JS as `window.pywebview.api.*`.
+**~2,900 lines.** Launches a PyWebView window (1180×820, resizable) with the embedded React SPA. The `Api` class (line 731) — every public (non-underscore) method on it is automatically exposed to JS as `window.pywebview.api.*`.
 
 ### 5.1 Launch
 
@@ -492,7 +492,7 @@ The UI language is **not** a `settings.json` setting; it's resolved once at proc
 
 ## 6. Supporting modules
 
-### 6.1 report.py (1,701 lines)
+### 6.1 report.py (~1,700 lines)
 
 Generates reports from the JSONL. Only imports `report_i18n` — it has no direct dependency on `dossier_charts_html.py`/`dossier_html_summary.py` (the "table → charts → summary" HTML composition is done by `webview_app.py`, not by `report.py` itself).
 
@@ -502,11 +502,11 @@ Generates reports from the JSONL. Only imports `report_i18n` — it has no direc
 - `write_filterable_html()` → the interactive HTML report (successor to the old `make_table_html`): a master/detail table with per-declaration expansion, finding cards with severity badges and evidence, a family/assets block, filters and sorting, column show/hide, row bookmarking (localStorage), a link back to the original filing via `nazk_public_declaration_url()` (`https://public.nazk.gov.ua/documents/{uuid}`), an errors-run summary block, and dossier-mode chronological sorting (`sort_rows_dossier_chronological`, active with `--dossier-chronological` or when the input path is under `deep_research/`)
 - `write_extras_html()` / `--extras-only` — **marked deprecated**, now just calls `write_filterable_html` with a deprecation warning
 
-### 6.2 report_i18n.py (92 lines)
+### 6.2 report_i18n.py (~90 lines)
 
 **Not** a UI-language switcher — this is a lookup table from English enum codes to Ukrainian labels for values in the LLM's analysis JSON (`FINDING_TYPE_UK`, `RISK_LEVEL_UK`/`SEVERITY_UK`, `PROFILE_FIELD_UK`), plus sort helpers (`severity_sort_rank`, `RISK_LEVEL_FILTER_ORDER`). Used by `report.py` and `usage_dashboard.py` to render `finding.type`/`risk_level`/profile-field keys in Ukrainian in the HTML/dashboard. It adds no English output — it's purely report-label localization.
 
-### 6.3 dossier_charts.py (287 lines) and dossier_charts_html.py (412 lines)
+### 6.3 dossier_charts.py (~290 lines) and dossier_charts_html.py (~410 lines)
 
 A clean data/render split:
 
@@ -515,7 +515,7 @@ A clean data/render split:
 
 The chart configuration (titles, colors, series) is mirrored on the frontend in `declarator-lm/src/dossierChartConfig.js` — the same set of charts is rendered both by the live React component (`DossierCharts.jsx`, during processing) and by the static HTML report (`dossier_charts_html.py`, after the run finishes); both consume the same `build_dossier_chart_series()` function.
 
-### 6.4 dossier_html_summary.py (336 lines)
+### 6.4 dossier_html_summary.py (~340 lines)
 
 Generates a text dossier summary and appends it to the HTML report:
 - Reads `report_table.html` (after the charts have already been injected) → `prepare_html_for_prompt()`: strips `<script>` tags, truncates to 250,000 characters
@@ -525,7 +525,7 @@ Generates a text dossier summary and appends it to the HTML report:
 
 Also supports **multi-model comparison at the dossier level**: `build_dossier_models_comparison_report()` runs the same dossier prompt through 2–4 selected models and renders a separate HTML with the answers side by side (`<section id="declarator-dossier-model-compare">`) — distinct from the single-declaration `debug_compare_models_html` in `webview_app.py`.
 
-### 6.5 usage_dashboard.py (387 lines)
+### 6.5 usage_dashboard.py (~390 lines)
 
 Computes the aggregated payload for the usage dashboard (shown when the app is idle, rendered by `UsageDashboard.jsx`). Two data sources:
 - **`analysis_results.jsonl`** (via `report.read_jsonl`/`dedupe_by_latest`) → `aggregate_dashboard()`: risk-level distribution, average/median risk score, total red flags, top finding types, per-model/per-year counts, the single highest-risk declaration, total analysis time, average time per declaration, and an estimate of "time saved" versus manual review (constant `MANUAL_REVIEW_MINUTES = 10` — an effort estimate, not a dollar-cost figure).
@@ -546,7 +546,7 @@ if __name__ == "__main__":
 
 A thin wrapper, not a separate app: it sets the environment variable **before** importing `webview_app`, then calls the same `webview_app.main()`. The batch-file equivalent is `run_en.bat` (`set DECLARATOR_UI_LANG=en && python webview_app.py`).
 
-### 6.7 deep_research_bridge.py (643 lines)
+### 6.7 deep_research_bridge.py (~640 lines)
 
 The bridge between `webview_app.py` and the standalone `nazk_parser/` module. Wrapped in `# --- DEEP_RESEARCH_BEGIN/END` markers — by design, the whole Deep Research feature can be disabled by deleting this file and its call sites in `webview_app.py`. It dynamically adds `nazk_parser/` to `sys.path` on each call rather than importing it as a package.
 
@@ -557,7 +557,7 @@ The bridge between `webview_app.py` and the standalone `nazk_parser/` module. Wr
 - `_format_nazk_diag(...)` — a shared human-readable error format (HTTP status, message, URL) used by all three download flows.
 - Path-traversal protection — two independent guards: `_safe_deep_research_subdir()` (for listing/applying a folder: rejects `..` and path separators) and `_output_dir_must_be_under_project()` (for downloads: the target directory must resolve to somewhere under the project root).
 
-### 6.8 openrouter_client.py (986 lines)
+### 6.8 openrouter_client.py (~990 lines)
 
 An OpenAI-compatible client using only the standard library:
 - `call_openrouter(model, system, user, host, api_key, ...)` → a dict with the analysis
@@ -576,12 +576,12 @@ A standalone module (its own `main.py`, its own structure) that talks directly t
   - `GET /documents/list?page=...&user_declarant_id=...&declaration_type=...&declaration_year=...` — a paginated list
   - `GET /documents/{document_id}` — the full declaration by id
   - The human-facing declaration card (not the API): `https://public.nazk.gov.ua/documents/{uuid}`
-- `nazk_client.py` (259 lines): a `urllib` wrapper with retries (up to 8 attempts) on 429/500/502/503/504, honoring `Retry-After` for 429 (clamped 8–120s); `fetch_list_page()`, `fetch_document()`.
-- `nazk_download.py` (308 lines): `download_professional_dataset()` (paging up to a file-count limit), `peek_first_lastname()` (get the first last name for a `user_declarant_id`, to name a folder before a full download), `download_all_for_user_declarant()` (every declaration for a subject, with an `on_progress` callback), `download_with_filters()` (a filtered selection with local criteria matching), `scan_local_folder()` (no network — search already-downloaded files).
-- `filters.py` (107 lines): `FilterCriteria` (year/year range/substring match on workplace/last name/first name), `matches_filters()`, `row_preview()` for a UI preview.
-- `nazk_parser/main.py` (82 lines) — a standalone CLI (`python main.py` from the `nazk_parser/` folder): `--save-dir`, `--limit`, `--delay`, `--query`, `--user-declarant-id`, `--declaration-year`, `--declaration-type`, `--document-type`. Not part of the main pipeline — wired in through `deep_research_bridge.py`.
+- `nazk_client.py` (~260 lines): a `urllib` wrapper with retries (up to 8 attempts) on 429/500/502/503/504, honoring `Retry-After` for 429 (clamped 8–120s); `fetch_list_page()`, `fetch_document()`.
+- `nazk_download.py` (~310 lines): `download_professional_dataset()` (paging up to a file-count limit), `peek_first_lastname()` (get the first last name for a `user_declarant_id`, to name a folder before a full download), `download_all_for_user_declarant()` (every declaration for a subject, with an `on_progress` callback), `download_with_filters()` (a filtered selection with local criteria matching), `scan_local_folder()` (no network — search already-downloaded files).
+- `filters.py` (~110 lines): `FilterCriteria` (year/year range/substring match on workplace/last name/first name), `matches_filters()`, `row_preview()` for a UI preview.
+- `nazk_parser/main.py` (~80 lines) — a standalone CLI (`python main.py` from the `nazk_parser/` folder): `--save-dir`, `--limit`, `--delay`, `--query`, `--user-declarant-id`, `--declaration-year`, `--declaration-type`, `--document-type`. Not part of the main pipeline — wired in through `deep_research_bridge.py`.
 
-### 6.10 launcher_gui.py (1,029 lines)
+### 6.10 launcher_gui.py (~1,000 lines)
 
 **Not the packaged EXE's entry point** (this corrects a claim in an earlier version of this document — `DeclaratorLM.spec` builds `webview_app.py`; `launcher_gui.py` isn't referenced in the spec and isn't imported anywhere else in the project). It's a standalone **Tkinter launcher**, entirely independent of pywebview/React: its own `Tk`/`ttk` window with the same settings fields as `webview_app.py`'s `DEFAULTS`, reading/writing the same `settings.json`, launching `main.py` via `subprocess.Popen` and streaming stdout into a text widget, driving the same `.run_control.json` (pause/stop), and — after a run — also invoking `dossier_html_summary`/`dossier_charts_html`. Useful as a lightweight GUI alternative without an npm/Vite/pywebview dependency — for example, on environments without .NET/EdgeChromium available.
 
@@ -601,25 +601,25 @@ A standalone module (its own `main.py`, its own structure) that talks directly t
 
 ## 7. Frontend: declarator-lm/
 
-**Stack:** React 18 + Vite 5 + the Geist font. `App.jsx` is 7,247 lines, one main component with no router and no state-management library (just `useState`/`useEffect`).
+**Stack:** React 18 + Vite 5 + the Geist font. `App.jsx` is ~7,300 lines, one main component with no router and no state-management library (just `useState`/`useEffect`).
 
 ### 7.1 Structure
 
 ```
 declarator-lm/
 ├── src/
-│   ├── App.jsx               # Main UI, 7,247 lines
-│   ├── DossierPanel.jsx      # Live "dossier" view during Deep Research (415 lines)
-│   ├── DossierCharts.jsx     # Three animated SVG dossier charts (320 lines)
-│   ├── UsageDashboard.jsx    # "All-time summary" dashboard (535 lines)
-│   ├── VisualLogPanel.jsx    # Card-based live processing log (859 lines)
-│   ├── dossierChartConfig.js # Shared dossier chart config (126 lines)
+│   ├── App.jsx               # Main UI, ~7,300 lines
+│   ├── DossierPanel.jsx      # Live "dossier" view during Deep Research (~420 lines)
+│   ├── DossierCharts.jsx     # Three animated SVG dossier charts (~320 lines)
+│   ├── UsageDashboard.jsx    # "All-time summary" dashboard (~540 lines)
+│   ├── VisualLogPanel.jsx    # Card-based live processing log (~860 lines)
+│   ├── dossierChartConfig.js # Shared dossier chart config (~130 lines)
 │   ├── index.css             # Styles (~3,900 lines)
 │   ├── main.jsx / main.en.jsx # Two Vite entry points (Ukrainian/English)
 │   └── i18n/
 │       ├── index.jsx         # I18nProvider/useI18n/useT React context
-│       ├── enCatalog.js      # Exact-match Ukrainian→English dictionary (558 lines)
-│       └── domTranslate.js   # MutationObserver-based DOM translator (58 lines)
+│       ├── enCatalog.js      # Exact-match Ukrainian→English dictionary (~560 lines)
+│       └── domTranslate.js   # MutationObserver-based DOM translator (~60 lines)
 ├── index.html / index.en.html # Two HTML entry points (lang="uk" / lang="en")
 ├── dist/                     # Built SPA (bundled into the PyInstaller EXE)
 ├── package.json              # declarator-lm@0.3.0, React 18, Vite 5, @fontsource/geist(-mono)
@@ -635,7 +635,7 @@ declarator-lm/
 | `TooltipWrap` | A hover-tooltip wrapper |
 | `LabelWithTooltip` | A label with a hint icon |
 | `ModelCombobox` | A searchable model-selection combobox |
-| `DossierPanel` | `NowCard` (the person currently being processed, risk gauge, processing status), `DossierProgressStrip` — the top progress bar for dossier mode; embeds `DossierCharts` at the bottom |
+| `DossierPanel` | `NowCard` (the person currently being processed, risk gauge, processing status), `DossierProgressStrip` — the top progress bar for dossier mode; embeds `DossierCharts` at the bottom. While `deepResearchActive === true`, the root container gets an `app--deep-research` class (`className={`app${deepResearchActive ? " app--deep-research" : ""}`}`) — the interface's accent color switches from blue to red for the whole duration of dossier processing |
 | `DossierCharts` | Three per-year charts (risk/finances/property) with tooltips and a toggleable legend; the one component that genuinely uses `useI18n` |
 | `UsageDashboard` | Summary tiles (analysis time, time saved, red flags, average risk, highest-risk declaration, last session), auto-flipping every 10s |
 | `VisualLogPanel` | Processing cards (`OkCard`/`ErrorCard`/`LimitCard`/`ProcessingCard`) with a risk gauge, finding tags, cost/duration badges, FLIP animation, a cards/text toggle, and inline error-review actions (retry/ignore/raise limits) |
@@ -835,7 +835,8 @@ React                         pywebview API
 
 - Download every declaration for a person by their NAZK `user_declarant_id` → `deep_research/{name}_{id}/`, or reuse an already-downloaded folder without hitting the API again
 - Chronological processing (oldest → newest)
-- A live "Dossier" view while processing (charts update as results arrive)
+- A live "Dossier" view while processing (charts update as results arrive; the interface's accent color switches from blue to red for the duration)
+- `move_processed` is skipped **before the subprocess even starts**: `webview_app.py` (`run_pipeline`) computes `under_deep_research = _is_under_deep_research(input_dir_arg)` and only appends `--processed-dir` to the `main.py` command when `move_processed and not under_deep_research` — so in dossier mode the flag is simply never passed, regardless of the checkbox state, and files stay in place for chronological reprocessing. The UI correspondingly disables the "Move processed JSON" toggle and shows an explanation
 - An HTML report with year-by-year trend charts plus an LLM dossier summary at the end
 
 ### 9.3 Dossier Summary (DEBUG)
@@ -878,18 +879,18 @@ python main.py \
 ```
 DeclaratorLM/
 │
-├── main.py                       # 3,075 lines: compact v2, LLM, pipeline, CLI
-├── webview_app.py                # 2,884 lines: PyWebView API (UA), subprocess bridge
+├── main.py                       # ~3,100 lines: compact v2, LLM, pipeline, CLI
+├── webview_app.py                # ~2,900 lines: PyWebView API (UA), subprocess bridge
 ├── webview_app_en.py             # 13 lines: the same server in English
-├── openrouter_client.py          # 986 lines: the OpenRouter API client
-├── deep_research_bridge.py       # 643 lines: NAZK API, declaration downloads
-├── report.py                     # 1,701 lines: CSV, the interactive HTML report
-├── report_i18n.py                # 92 lines: Ukrainian labels for analysis values
-├── dossier_charts.py             # 287 lines: time-series data for dossier charts
-├── dossier_charts_html.py        # 412 lines: embeds charts into the HTML report
-├── dossier_html_summary.py       # 336 lines: LLM dossier summary + model comparison
-├── usage_dashboard.py            # 387 lines: aggregated usage statistics
-├── launcher_gui.py               # 1,029 lines: standalone Tkinter launcher (not the EXE entry point)
+├── openrouter_client.py          # ~990 lines: the OpenRouter API client
+├── deep_research_bridge.py       # ~640 lines: NAZK API, declaration downloads
+├── report.py                     # ~1,700 lines: CSV, the interactive HTML report
+├── report_i18n.py                # ~90 lines: Ukrainian labels for analysis values
+├── dossier_charts.py             # ~290 lines: time-series data for dossier charts
+├── dossier_charts_html.py        # ~410 lines: embeds charts into the HTML report
+├── dossier_html_summary.py       # ~340 lines: LLM dossier summary + model comparison
+├── usage_dashboard.py            # ~390 lines: aggregated usage statistics
+├── launcher_gui.py               # ~1,000 lines: standalone Tkinter launcher (not the EXE entry point)
 │
 ├── requirements.txt              # pywebview>=4,<6; psutil>=5.9,<8; pythonnet>=3.0.1,<4
 ├── DeclaratorLM.spec             # PyInstaller onefile spec (entry point: webview_app.py)
@@ -899,12 +900,12 @@ DeclaratorLM/
 │
 ├── declarator-lm/                # The React SPA
 │   ├── src/
-│   │   ├── App.jsx               # 7,247 lines: the main UI
-│   │   ├── DossierPanel.jsx      # 415 lines: the live dossier view
-│   │   ├── DossierCharts.jsx     # 320 lines: dossier charts
-│   │   ├── UsageDashboard.jsx    # 535 lines: the usage dashboard
-│   │   ├── VisualLogPanel.jsx    # 859 lines: the card-based processing log
-│   │   ├── dossierChartConfig.js # 126 lines: chart configuration
+│   │   ├── App.jsx               # ~7,300 lines: the main UI
+│   │   ├── DossierPanel.jsx      # ~420 lines: the live dossier view
+│   │   ├── DossierCharts.jsx     # ~320 lines: dossier charts
+│   │   ├── UsageDashboard.jsx    # ~540 lines: the usage dashboard
+│   │   ├── VisualLogPanel.jsx    # ~860 lines: the card-based processing log
+│   │   ├── dossierChartConfig.js # ~130 lines: chart configuration
 │   │   ├── i18n/                 # index.jsx, enCatalog.js, domTranslate.js
 │   │   └── index.css             # ~3,900 lines: styles
 │   ├── index.html / index.en.html # Two Vite entry points
@@ -971,7 +972,7 @@ pyinstaller DeclaratorLM.spec
 |--------|-------------|
 | `BUILD_FRONTEND.bat` | Builds the frontend (`npm run build`) |
 | `run_en.bat` | Launches the app with the English UI (`DECLARATOR_UI_LANG=en`) |
-| `reasoning.bat` | Launches with reasoning/THINK streaming enabled (`DECLARATOR_REASONING_DEBUG=1`) |
+| `reasoning.bat` | ⚠️ WIP: launches with reasoning/THINK streaming enabled (`DECLARATOR_REASONING_DEBUG=1`) |
 
 ### 11.4 Python dependencies
 

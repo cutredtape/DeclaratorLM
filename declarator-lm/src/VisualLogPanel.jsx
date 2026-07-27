@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "./i18n";
 
 const TAB_SWITCH_MS = 700;
 const FEED_FLIP_MS = 700;
@@ -196,7 +197,7 @@ function CardActionRow({ entry, showActions, busy, onRetry, onIgnore, onRaiseLim
       {limit ? (
         <button
           type="button"
-          className="btn-primary visual-log-card-btn"
+          className="visual-log-card-btn visual-log-card-btn--warn"
           disabled={isBusy}
           onClick={() => onRaiseLimits?.(file)}
         >
@@ -205,7 +206,7 @@ function CardActionRow({ entry, showActions, busy, onRetry, onIgnore, onRaiseLim
       ) : (
         <button
           type="button"
-          className="btn-primary visual-log-card-btn"
+          className="visual-log-card-btn visual-log-card-btn--accent"
           disabled={isBusy}
           onClick={() => onRetry?.(file)}
         >
@@ -214,7 +215,7 @@ function CardActionRow({ entry, showActions, busy, onRetry, onIgnore, onRaiseLim
       )}
       <button
         type="button"
-        className="btn-secondary visual-log-card-btn"
+        className="visual-log-card-btn visual-log-card-btn--ghost"
         disabled={isBusy}
         onClick={() => onIgnore?.(file)}
       >
@@ -290,6 +291,7 @@ function PendingDots() {
 }
 
 function OkCard({ entry, enterAnim }) {
+  const { t } = useI18n();
   const lvl = levelOf(entry.score);
   const meta = RISK_LEVELS[lvl];
   const cost = fmtCost(entry.cost_usd);
@@ -311,10 +313,10 @@ function OkCard({ entry, enterAnim }) {
             className="visual-log-tag visual-log-tag-risk"
             style={{ background: `color-mix(in srgb, ${meta.var} 18%, transparent)`, color: meta.var }}
           >
-            ● ризик {meta.label}
+            ● {t("ризик")} {t(meta.label)}
           </span>
           {finds > 0 && (
-            <span className="visual-log-tag visual-log-tag-find">⚑ {finds} знахідок</span>
+            <span className="visual-log-tag visual-log-tag-find">⚑ {finds} {t("знахідок")}</span>
           )}
           {entry.moved && <span className="visual-log-tag visual-log-tag-moved">↪ переміщено</span>}
         </div>

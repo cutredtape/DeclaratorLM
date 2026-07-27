@@ -2,14 +2,14 @@
 
 ### 🔍 Reads an asset declaration the way an investigative journalist would — not the way an exhausted human does at 2 a.m.
 
-**What this is.** In Ukraine, officials, MPs, judges, and other public figures file electronic asset declarations with [NAZK](https://public.nazk.gov.ua/public_api) every year — official reports of their wealth, income, and their family's property. These declarations are public. DeclaratorLM takes such a declaration, cleans it, and runs it through AI that looks for signs of corruption: wealth that doesn't match income, assets held by third parties, suspicious patterns. The output is a risk score, concrete findings with evidence, and a link back to the primary source. Locally on your own machine, or through cloud models — your choice.
+**What this is.** In Ukraine, officials, MPs, judges, and other public figures file electronic asset declarations with [NAZK](https://public.nazk.gov.ua/public_api) every year — official reports of their wealth, income, and their family's property. These declarations are public. DeclaratorLM takes such a declaration, cleans it, and runs it through AI that looks for signs of corruption: wealth that doesn't match income, assets held by third parties, suspicious patterns. The output is a risk score, concrete findings with evidence, and a link back to the primary source. Built for journalists, anti-corruption researchers, and civic-tech developers who need to triage more declarations than anyone could read by hand. Locally on your own machine, or through cloud models — your choice.
 
 > 📌 **First, the essentials: scope and the tool's role.**
 > - **The specialization is narrow and deliberate.** The tool is tailored to the **Ukrainian context**: the data format, the way declaration sections are parsed, family-relation resolution, the prompts — all of it is tied to the structure of NAZK's open API. It is not a universal "declarations analyzer" — it works specifically with the NAZK register (Ukraine). To use it on another country's declarations you'd have to adapt it, and the code is open for exactly that.
 > - **It's a powerful analytical tool — but a tool.** DeclaratorLM does the heavy lifting: it cleans, structures, analyzes, builds reports, and shows you **where to look**. The final assessments, conclusions, and decisions stay with a human — as they should (see [Legal and ethical boundaries](#legal-boundaries)).
 
 <p align="center">
-  <img src="docs/screenshots/01-dashboard.png" alt="DeclaratorLM main screen: aggregate dashboard across all processed declarations" width="880">
+  <img src="docs/Hero.png" alt="DeclaratorLM — AI-powered analysis of public declarations: raw declarations → AI analysis → risk assessment → insights and reports" width="880">
 </p>
 
 <p align="center">
@@ -49,6 +49,27 @@ One simple pipeline — from a raw file to a finished conclusion:
 2. **🧹 Cleanup (compact v2).** The program discards technical noise, decodes internal codes, and turns "owner = person #2" into "spouse: Maria Ivanenko." The declaration becomes **three times shorter**, while its content stays intact (and there's a "Detailed" mode as a safety net — see below).
 3. **🤖 Analysis.** The compacted declaration goes to a model (local or cloud) that compares income against assets and looks for signs of corruption.
 4. **📊 Report.** The result is an interactive HTML table, CSV, and — in dossier mode — year-by-year trend charts.
+
+---
+
+## 🌐 Porting to other countries
+
+DeclaratorLM is built for Ukraine's NAZK, but the approach is universal: in almost every country a declaration has the same essence — property, family, income, accounts, business, debts. The main barrier to adaptation is **not the schema, but the data format**: from ready-made JSON to scanned paper.
+
+The adapter idea is simple: write one module per country that converts its data into the internal `compact v2` format — and then all the analysis, prompts, and reports work **with no changes at all**.
+
+| Country | Data format | Adaptation effort |
+|---------|-------------|:---:|
+| 🇺🇦 Ukraine | JSON via API | ✅ already supported |
+| 🇫🇷 France | XML (open data) | ⭐ low |
+| 🇬🇪 Georgia | HTML / OpenSanctions | ⭐⭐ |
+| 🇲🇩 Moldova | HTML / OpenSanctions | ⭐⭐ |
+| 🇨🇱 Chile | online disclosure | ⭐⭐ |
+| 🇷🇴 Romania | PDF form | ⭐⭐⭐ |
+| 🇺🇸 USA | PDF (OGE 278e) | ⭐⭐⭐ |
+| most countries | scans / not public | 🔴 unsuitable |
+
+A detailed breakdown of the most suitable countries, the unsuitable cases, and adaptation paths (including a "bulk" route via OpenSanctions / FollowTheMoney data) is in **[PORTING.md](PORTING.md)**.
 
 ---
 
@@ -119,18 +140,24 @@ The core ethical guarantee is that the system is **not a "black box."** Every fi
 
 ## 🖼️ What it looks like
 
+**📈 Usage dashboard** — what you see when nothing is running: how many declarations have been processed, the risk-level breakdown, time saved, and the most common finding types:
+
+<p align="center">
+  <img src="docs/screenshots/en/01-dashboard.png" alt="Usage dashboard: aggregate stats across all processed declarations" width="880">
+</p>
+
 <table>
 <tr>
 <td width="50%">
 
 **☁️ Cloud provider settings**
-<img src="docs/screenshots/02-cloud-mode-settings.png" alt="Cloud mode settings: choose Ollama or OpenRouter, host, model, API key, balance, concurrency">
+<img src="docs/screenshots/en/02-cloud-mode-settings.png" alt="Cloud mode settings: choose Ollama or OpenRouter, host, model, API key, balance, concurrency">
 
 </td>
 <td width="50%">
 
 **🗂️ Declaration catalog**
-<img src="docs/screenshots/05-file-catalog.png" alt="File catalog of declarations, sortable by declarant, year, position, workplace">
+<img src="docs/screenshots/en/05-file-catalog.png" alt="File catalog of declarations, sortable by declarant, year, position, workplace">
 
 </td>
 </tr>
@@ -138,13 +165,13 @@ The core ethical guarantee is that the system is **not a "black box."** Every fi
 <td width="50%">
 
 **🔎 Searching the catalog**
-<img src="docs/screenshots/06-file-catalog-search.png" alt="Searching declaration files by declarant name or workplace">
+<img src="docs/screenshots/en/06-file-catalog-search.png" alt="Searching declaration files by declarant name or workplace">
 
 </td>
 <td width="50%">
 
 **📥 Downloading one declaration from NAZK**
-<img src="docs/screenshots/03-parse-single-declaration.png" alt="Modal for downloading a single declaration by declaration_id directly from the NAZK API">
+<img src="docs/screenshots/en/03-parse-single-declaration.png" alt="Modal for downloading a single declaration by declaration_id directly from the NAZK API">
 
 </td>
 </tr>
@@ -152,13 +179,13 @@ The core ethical guarantee is that the system is **not a "black box."** Every fi
 <td width="50%">
 
 **📦 Bulk-downloading from NAZK**
-<img src="docs/screenshots/04-parse-bulk.png" alt="Modal for bulk-downloading declarations by search criteria directly from the NAZK API">
+<img src="docs/screenshots/en/04-parse-bulk.png" alt="Modal for bulk-downloading declarations by search criteria directly from the NAZK API">
 
 </td>
 <td width="50%">
 
 **⏳ Live processing log**
-<img src="docs/screenshots/07-live-log-cards-processing.png" alt="Live log as animated cards: declarations in progress and already processed, with risk score">
+<img src="docs/screenshots/en/07-live-log-cards-processing.png" alt="Live log as animated cards: declarations in progress and already processed, with risk score">
 
 </td>
 </tr>
@@ -178,17 +205,33 @@ The core ethical guarantee is that the system is **not a "black box."** Every fi
   <img src="docs/screenshots/10-html-report-expanded.png" alt="Expanded HTML report row: AI findings, family and assets, facts needing verification, conclusion" width="880">
   <br><sub>An expanded row: findings with evidence, family assets, what to verify, and the final assessment.</sub>
 </p>
+<p align="center">
+  <img src="docs/screenshots/11-html-report-expanded-2.png" alt="Another example of an expanded HTML report row, with a different risk profile" width="880">
+  <br><sub>Same report, a different declarant — the risk card adapts to the specific findings.</sub>
+</p>
 
 **🕵️ "Dossier" mode (Deep Research)** — download every declaration a single person ever filed, straight from the API, or pick a local folder of already-downloaded ones:
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/12-dossier-mode-download.png" alt="The download-from-API tab in dossier mode"></td>
+<td width="50%"><img src="docs/screenshots/en/12-dossier-mode-download.png" alt="The download-from-API tab in dossier mode"></td>
 <td width="50%"><img src="docs/screenshots/13-dossier-mode-select-folder.png" alt="Selecting a deep_research folder with a specific person's declarations for chronological analysis"></td>
 </tr>
 </table>
 
-The result is a report with every declaration that person filed, laid out chronologically, with **year-by-year charts of risk, finances, and assets**, plus an LLM summary of the whole dossier:
+While it's processing, the interface switches to a red accent and shows a live dossier view — the declarant currently being analyzed, with charts that update as results come in:
+
+<p align="center">
+  <img src="docs/screenshots/13b-dossier-live-view.png" alt="Live dossier view during processing: red accent theme, the current declarant, charts updating in real time" width="880">
+</p>
+
+The result is a report with every declaration that person filed, laid out chronologically:
+
+<p align="center">
+  <img src="docs/screenshots/14-dossier-report.png" alt="Dossier report: a chronological table of every declaration filed by one person" width="880">
+</p>
+
+...plus year-by-year charts of risk, finances, and assets, and an LLM summary of the whole dossier:
 
 <p align="center">
   <img src="docs/screenshots/15-dossier-report-charts.png" alt="Dossier charts: risk-score trend, finances (income/assets/debts), and property count by year" width="880">
@@ -206,7 +249,6 @@ The result is a report with every declaration that person filed, laid out chrono
 - 🕵️ **Deep Research** — chronological analysis of all of one person's declarations, with charts.
 - 📊 **Ready-made reports** — interactive HTML, CSV, an LLM dossier summary.
 - 📈 **Usage dashboard** — how many were processed, the risk breakdown, the most common findings, an estimate of time saved.
-- 🧠 **Transparency** — you can enable streaming of the models' "thoughts" (reasoning) and watch the chain of reasoning unfold.
 - 🛠️ **DEBUG mode** — more on this below.
 - 🖱️ **GUI + CLI** — a friendly app and a full command line for scripting.
 
@@ -218,7 +260,7 @@ The result is a report with every declaration that person filed, laid out chrono
 |-------|------------|
 | 🪟 GUI | [PyWebView](https://pywebview.flowrl.com/) 5 (Edge Chromium on Windows) |
 | ⚛️ Frontend | React 18 + Vite 5, Geist font |
-| 🐍 Backend | Python 3.11+, almost no external dependencies |
+| 🐍 Backend | Python 3.10+, almost no external dependencies |
 | 🖥️ LLM local | [Ollama](https://ollama.com) `/api/chat` |
 | 🌐 LLM cloud | [OpenRouter](https://openrouter.ai/docs) (OpenAI-compatible) |
 | 🏛️ Data source | NAZK's open [public API](https://public.nazk.gov.ua/public_api) (`public-api.nazk.gov.ua/v2`) |
@@ -229,35 +271,32 @@ The result is a report with every declaration that person filed, laid out chrono
 
 ## 🚀 Quick start
 
-> 💻 **Requirements (honest about the platform).** Built and tested **on Windows**: the UI uses Edge Chromium (WebView2) via `pywebview` + `pythonnet` (.NET), and some spots call Win32 directly. `pywebview` is nominally cross-platform, but running on macOS/Linux out of the box is **not guaranteed** — it would take code changes. You'll also need: **Python 3.11+**, **Node.js** (once, to build the frontend), and either **[Ollama](https://ollama.com)** for local models or an **[OpenRouter](https://openrouter.ai) key** for the cloud.
+> 💻 **Requirements (honest about the platform).** Built and tested **on Windows**: the UI uses Edge Chromium (WebView2) via `pywebview` + `pythonnet` (.NET), and some spots call Win32 directly. `pywebview` is nominally cross-platform, but running on macOS/Linux out of the box is **not guaranteed** — it would take code changes. You'll also need: **Python 3.10+**, **Node.js** (once, to build the frontend), and either **[Ollama](https://ollama.com)** for local models or an **[OpenRouter](https://openrouter.ai) key** for the cloud.
 
 ```bash
 # 1. Install Python dependencies
 python -m pip install -r requirements.txt
 
-# 2. Launch the app (Ukrainian)
+# 2. Build the frontend — ONCE, before the first GUI launch (or BUILD_FRONTEND.bat)
+cd declarator-lm && npm install && npm run build && cd ..
+
+# 3. Launch the app (Ukrainian)
 python webview_app.py
 
 #    ...or in English
 python webview_app_en.py      # (or run_en.bat on Windows)
 
-# 3. Or from the command line — every declaration in a folder, with a local model
+# 4. Or from the command line (no frontend needed) — every declaration in a folder
 python main.py --input-dir dataset_declarations --model llama3.1
 
-# 4. Or via OpenRouter (cloud, 100+ models)
+# 5. Or via OpenRouter (cloud, 100+ models)
 python main.py --input-dir dataset_declarations \
   --provider openrouter \
   --openrouter-model meta-llama/llama-3.3-70b-instruct \
   --openrouter-api-key sk-or-v1-...
 ```
 
-Before the first launch you need to build the frontend once (or run `BUILD_FRONTEND.bat`):
-
-```bash
-cd declarator-lm
-npm install
-npm run build   # → declarator-lm/dist/ (both language versions at once)
-```
+> ℹ️ Step 2 (building the frontend) is only for the GUI and is done once — a fresh clone has no `declarator-lm/dist/` yet. The command-line mode (`main.py`) works without it.
 
 The full command-line reference (`--timeout`, `--retries`, `--max-chars`, `--sort-order`, `--max-concurrent-declarations`, etc.) lives in [STRUCTURE.en.md](STRUCTURE.en.md#2-backend-mainpy).
 
@@ -275,8 +314,8 @@ This decides almost everything. The same tool with different models produces any
 
 | Scenario | Recommendation |
 |----------|----------------|
-| 🖥️ **Local** (private, your own GPU) | The **Qwen 3.x series, 32B and up** — currently the best quality/privacy balance for this task. Smaller models are "just to play around." |
-| 🌐 **Cloud** (OpenRouter) | Strong instruction-tuned models: Llama 3.3 70B, large Qwen, etc. Here you can pick a more powerful model with no demands on your own hardware (but the data goes to the provider — see [Privacy](#privacy)). |
+| 🖥️ **Local** (private, your own GPU) | Not many home PCs can run a 32B model — and that's fine. A practical floor: **Qwen 3 or newer**, or **Llama 3 or newer**, at **12B parameters or more**, preferably a **fine-tuned checkpoint** rather than the raw original model at the same size — it tends to be more accurate for this task. Smaller models are "just to play around." |
+| 🌐 **Cloud** (OpenRouter) | In the author's own runs, **Qwen 3** and **Kimi K2.5/K2.6** have performed best — consistently accurate; Kimi K2.5 has never let me down. That said, this isn't a rigorous benchmark, just personal experience — a systematic model comparison for this specific task hasn't been done yet; it's an open question worth further testing. |
 
 The rule of thumb: **weak analysis is almost always a weak model, not a broken tool.** Before drawing conclusions about quality, try a more capable model.
 
@@ -318,13 +357,12 @@ No restart needed — a **"DEBUG settings"** block appears in the sidebar immedi
 | ⚖️ **Model comparison** | Runs **one** declaration through 2–4 different models and shows the results side by side — to see which model is more accurate. |
 | 📄 **Dossier summary** | Without the full pipeline: the model reads a finished HTML report and appends a text summary to it. |
 | 🔄 **Regenerate HTML + CSV** | Rebuilds the report from an existing JSONL without re-analyzing. |
-| 🧠 **THINK_EVENT debug** | Enables streaming of reasoning models' "thoughts" — you see the chain of reasoning in real time. |
 | 📟 **System load** | Shows CPU / RAM / GPU while running. |
 | 🧽 **Wipe usage traces** | One click clears all local results, reports, and temporary files. |
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/16-debug-audit-mode.png" alt="Audit mode: toggles for saving the raw declaration, compact form, request payload, raw/parsed response, normalized analysis"></td>
+<td width="50%"><img src="docs/screenshots/en/16-debug-audit-mode.png" alt="Audit mode: toggles for saving the raw declaration, compact form, request payload, raw/parsed response, normalized analysis"></td>
 <td width="50%"><img src="docs/screenshots/17-debug-prompt-editor.png" alt="Prompt editor: the pipeline's system and user prompt templates, editable for the current session without touching code"></td>
 </tr>
 <tr>
@@ -342,6 +380,8 @@ Ukrainian declarations have been public since 2016, and access is provided by th
 - 📄 download a **single** declaration by its `declaration_id`;
 - 🕵️ download **every** declaration filed by one person, by `user_declarant_id` — this is "Deep Research" mode: you can see how assets and risk changed over the years;
 - 📦 bulk-download declarations **for a given year** (with filters) to build your own research corpus.
+
+> 🌍 **Testing the original intent from outside Ukraine?** The NAZK API is a Ukrainian government service, and it may be unreachable or unreliable from some countries' networks. If downloading declarations fails or times out, try connecting through a Ukrainian VPN before assuming something in the tool is broken.
 
 > 🧭 **Where the IDs come from — and why you don't hunt for them by hand.**
 > - `declaration_id` (for "download one") is simply the end of a declaration's address on the NAZK site: `https://public.nazk.gov.ua/documents/XXXXXXXX` → that `XXXXXXXX`.
@@ -362,26 +402,80 @@ python webview_app_en.py    # English
 
 Under the hood it's one React app with two entry points. The model's analysis and the declarations themselves stay in their original language — only the app's interface is translated.
 
----
-
-## 🌐 Porting to other countries
-
-DeclaratorLM is built for Ukraine's NAZK, but the approach is universal: in almost every country a declaration has the same essence — property, family, income, accounts, business, debts. The main barrier to adaptation is **not the schema, but the data format**: from ready-made JSON to scanned paper.
-
-The adapter idea is simple: write one module per country that converts its data into the internal `compact v2` format — and then all the analysis, prompts, and reports work **with no changes at all**.
-
-| Country | Data format | Adaptation effort |
-|---------|-------------|:---:|
-| 🇺🇦 Ukraine | JSON via API | ✅ already supported |
-| 🇫🇷 France | XML (open data) | ⭐ low |
-| 🇬🇪 Georgia | HTML / OpenSanctions | ⭐⭐ |
-| 🇲🇩 Moldova | HTML / OpenSanctions | ⭐⭐ |
-| 🇨🇱 Chile | online disclosure | ⭐⭐ |
-| 🇷🇴 Romania | PDF form | ⭐⭐⭐ |
-| 🇺🇸 USA | PDF (OGE 278e) | ⭐⭐⭐ |
-| most countries | scans / not public | 🔴 unsuitable |
-
-A detailed breakdown of the most suitable countries, the unsuitable cases, and adaptation paths (including a "bulk" route via OpenSanctions / FollowTheMoney data) is in **[PORTING.md](PORTING.md)**.
+> ⚠️ **The English translation is not complete — here's exactly what's missing, and how you could take this further than English.** Three separate things are going on:
+> 1. **The app window (UI shell) — partially covered, actively improving.** Translation works by matching Ukrainian strings against a dictionary: `declarator-lm/src/i18n/enCatalog.js` (plus `enCatalogExtras.js`, a growing second catalog file) holds exact Ukrainian → English pairs, normalized for whitespace/apostrophe variants; `domTranslate.js` walks the DOM (with a `MutationObserver` for anything added later, like log cards), matching leaf text nodes, whole-element text for simple containers, and translatable attributes (`title`/`aria-label`/`placeholder`/`alt`). Rich-text content that's just too long/free-form to dictionary-match (like the help modals) instead gets a hand-written English counterpart in `declarator-lm/src/i18n/modalsEn.jsx`, swapped in by `App.jsx` directly. `App.jsx` itself is still hardcoded Ukrainian and never calls `useI18n`/`useT`. So any Ukrainian string with no catalog entry yet still silently stays in Ukrainian in the English build — the mechanism has gotten more capable, but coverage is still a moving target.
+> 2. **The generated HTML report — the bigger gap.** `report_table.html` (the actual analysis output you get at the end) is **Ukrainian-only, full stop, with no other-language mode at all right now.** `report_i18n.py` only has `*_UK` dictionaries (finding types, risk levels, profile field labels), and `report.py`, `dossier_charts_html.py`, and `dossier_html_summary.py` all have their table headers, section titles, filter placeholders, and chart labels hardcoded in Ukrainian directly in the Python — e.g. `"ПІБ декларанта"`, `"Посада / установа"`, `"Знахідки AI"`, `"Індикатори ризику"`. None of it reads the app's current UI language.
+> 3. **The language-switching mechanism itself is wired for exactly one alternate language, not language-agnostic.** `webview_app.py`'s `_ui_lang()` only special-cases `"en"` — anything else falls through to Ukrainian; `_frontend_index_path()` only knows to look for `dist/index.en.html`; `vite.config.js`'s `rollupOptions.input` hardcodes exactly two entries (`main`, `en`). Adding a third UI language means extending these, not just adding a bigger dictionary.
+>
+> **This isn't only about finishing English.** If you'd rather see the app fully in French, Spanish, German, or anything else, the same architecture applies — you'd just be building a new language pack instead of extending the English one. Here are two ready-to-use prompts for an AI coding assistant (like Claude Code) working in this repo — written generically, so swap in whichever language you actually want:
+>
+> <details>
+> <summary><strong>Prompt: add or finish a UI translation for a target language</strong></summary>
+>
+> ```text
+> I want the DeclaratorLM UI shell available in <TARGET LANGUAGE> (e.g. French,
+> Spanish, German — pick one). Two cases, handle whichever applies:
+>
+> (a) English already has a partial translation — study
+>     declarator-lm/src/i18n/enCatalog.js, enCatalogExtras.js, domTranslate.js,
+>     and modalsEn.jsx to understand the pattern (dictionary matching with
+>     normalization for simple strings, a MutationObserver-driven DOM walker
+>     for elements/attributes, hand-written English components for long
+>     rich-text content that can't be dictionary-matched), then replicate the
+>     same pattern for <TARGET LANGUAGE>: a new <lang>Catalog.js (+
+>     <lang>CatalogExtras.js if it grows large) and a new modals<Lang>.jsx.
+>
+> (b) No translation exists yet for <TARGET LANGUAGE> — build the same pattern
+>     from scratch, reusing domTranslate.js's matching logic (it's already
+>     language-agnostic; it just needs a catalog to match against).
+>
+> Either way, also wire up the entry points, which currently only know about
+> "en": add a new Vite build entry in declarator-lm/vite.config.js
+> (rollupOptions.input), a new declarator-lm/index.<lang>.html, and a new
+> declarator-lm/src/main.<lang>.jsx (mirror main.en.jsx: wrap <App/> in
+> <I18nProvider locale="<lang>">, call installDomTranslator). On the Python
+> side, generalize webview_app.py's _ui_lang() (currently only recognizes
+> "en" via DECLARATOR_UI_LANG/DECLARATOR_LANG/--lang, else falls back to
+> Ukrainian) and _frontend_index_path() (currently only looks for
+> dist/index.en.html) to handle an arbitrary language code, not just "en".
+>
+> Then audit every user-facing string in App.jsx, DossierPanel.jsx,
+> DossierCharts.jsx, UsageDashboard.jsx, and VisualLogPanel.jsx against your
+> new catalog, launch the app with the new language selected, exercise every
+> screen and modal (including DEBUG mode, unlocked via Shift + four clicks on
+> the logo), and report any strings that can't be caught this way because
+> they're generated too dynamically for the DOM walker to match.
+> ```
+>
+> </details>
+>
+> <details>
+> <summary><strong>Prompt: translate the generated HTML report</strong></summary>
+>
+> ```text
+> The generated report_table.html (built by report.py, with
+> dossier_charts_html.py and dossier_html_summary.py appending charts and an
+> LLM summary) is entirely hardcoded in Ukrainian and has no other-language
+> mode. Make the output language configurable rather than hardcoding a
+> "protected" default: mirror report_i18n.py's FINDING_TYPE_UK / RISK_LEVEL_UK
+> / SEVERITY_UK / PROFILE_FIELD_UK dictionaries with equivalents for whichever
+> language(s) you want (English first is reasonable, but design it so adding
+> a second or third language later is just another dictionary, not a rewrite),
+> thread a language parameter through report.py's HTML-building functions
+> (write_filterable_html and friends) so every hardcoded string in the
+> template — table headers, filter placeholders, section titles like
+> "Знахідки AI" / "Потребує перевірки" / "Висновок" — resolves per language,
+> and do the same for the hardcoded chart titles/legends in
+> dossier_charts_html.py (e.g. "Індикатори ризику", "Фінанси (грн)", "Дохід",
+> "Активи", "Борги") and the summary prompt language in dossier_html_summary.py.
+> Wire the language choice to the same signal webview_app.py resolves for the
+> UI. Don't treat the Ukrainian strings as a fixed default that must be
+> preserved byte-for-byte — if this is a fork, the upstream repo already has
+> the original Ukrainian behavior; feel free to make whichever language you
+> need the actual default for your copy.
+> ```
+>
+> </details>
 
 ---
 
@@ -427,7 +521,6 @@ The full, detailed architecture — every API method and data format — is in *
 - Dossier summary + 2–4 model comparison
 - Usage dashboard
 - Audit mode: saving every processing artifact
-- Reasoning debug: streaming the model's "thoughts"
 - Resume after an interruption
 - Full prompt control from the UI (session-scoped)
 - Ukrainian and English interfaces

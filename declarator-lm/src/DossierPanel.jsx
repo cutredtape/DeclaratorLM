@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import DossierCharts from "./DossierCharts";
 import { RISK_COLORS, RISK_LEVEL_UK, levelOf } from "./dossierChartConfig";
+import { useI18n } from "./i18n";
 
 function cardPos(position, workplace) {
   const pos = String(position || "").trim();
@@ -87,6 +88,7 @@ function NowCard({
   processedCount,
   plannedTotal,
 }) {
+  const { t } = useI18n();
   const [elapsed, setElapsed] = useState("0.0с");
   const inFlight = Array.isArray(activeProcessing) ? activeProcessing : [];
   const isParallelMode = Number(pipelineMaxConcurrent) > 1;
@@ -272,7 +274,7 @@ function NowCard({
             {" "}
             готово · ризик
             {" "}
-            <b style={{ color }}>{RISK_LEVEL_UK[lvl]}</b>
+            <b style={{ color }}>{t(RISK_LEVEL_UK[lvl])}</b>
           </div>
           {(finds > 0 || flags > 0) && (
             <div className="dossier-nc-tags">

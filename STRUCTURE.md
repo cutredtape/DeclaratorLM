@@ -59,7 +59,7 @@
 
 ## 2. Бекенд: main.py
 
-**Розмір:** 3075 рядків. Єдина точка входу як для GUI (через subprocess), так і для прямого CLI.
+**Розмір:** ~3 100 рядків. Єдина точка входу як для GUI (через subprocess), так і для прямого CLI.
 
 ### 2.1 Промпти
 
@@ -133,7 +133,7 @@ append_jsonl(output_path, result)
 
 **Прогрес і телеметрія для UI:** окремий структурований лог-канал `VISUAL_LOG|{json}` (стани `PROCESSING`/`OK`/`ERR`/`LIMIT_EXCEEDED` по кожному файлу), плюс `PIPELINE_TOTAL|N`, `PIPELINE_ERR_REVIEW|{...}`, `VISUAL_RUN_TOTALS|{...}` — саме це споживає `VisualLogPanel.jsx` для карткового живого логу. Наприкінці прогону, якщо задано `--control-file`, є інтерактивна фаза розгляду помилок (`_run_error_review_phase`): `retry` / `raise_limits` / `ignore` / `stop` для файлів, що не вдалося обробити.
 
-**Reasoning debug (`--reasoning-debug`):** стрімить Ollama `/api/chat` з `think:true`, буферизує дельти й емітить `THINK_EVENT|<текст>` у stdout з дебаунсом (флаш при ≥80 символів, розділовому знаку, або таймауті 0.7с). При збої стрімінгу — резервний нестрімінговий виклик. Для OpenRouter — ігнорується з попередженням (модель отримує звичайний запит).
+**Reasoning debug (`--reasoning-debug`) — ⚠️ WIP, наразі заморожено й нестабільно (тому й у WIP-секції DEBUG-панелі):** стрімить Ollama `/api/chat` з `think:true`, буферизує дельти й емітить `THINK_EVENT|<текст>` у stdout з дебаунсом (флаш при ≥80 символів, розділовому знаку, або таймауті 0.7с). При збої стрімінгу — резервний нестрімінговий виклик. Для OpenRouter — ігнорується з попередженням (модель отримує звичайний запит).
 
 **OpenRouter pricing/usage:** перед запуском `main()` тягне живі ціни й контекстні ліміти моделей (`fetch_openrouter_models_enriched`), використовує їх і для обмеження розміру payload на конкретну модель, і для розрахунку вартості/токенів по кожному результату (`openrouter_usage` у виході), і для підсумкового футера вартості прогону.
 
@@ -193,7 +193,7 @@ append_jsonl(output_path, result)
 | `--audit-mode-dir` | `audit` | Коренева папка артефактів аудиту |
 | `--audit-capture-raw-declaration` та ще 6 аналогічних прапорців | усі `False` | Точковий контроль, які саме артефакти зберігати: `-compact-declaration`, `-request-payload`, `-response-raw`, `-response-parsed`, `-normalized-analysis`, `-attempt-meta` |
 | `--on-limit` | `auto-raise-32000` | `auto-raise-32000 \| ask \| skip \| fail-run` — поведінка при перевищенні `--max-chars` |
-| `--reasoning-debug` | вимкнено | Стрімінг reasoning-токенів моделі як `THINK_EVENT` у stdout |
+| `--reasoning-debug` | вимкнено | ⚠️ WIP/нестабільно: стрімінг reasoning-токенів моделі як `THINK_EVENT` у stdout |
 | `--api-key` | `""` | Bearer-токен для хмарного Ollama-хосту |
 | `--cloud-mode` | вимкнено | Прапорець хмарного режиму (лише для логів/UX) |
 | `--provider` | `ollama` | `ollama \| openrouter` |
@@ -375,7 +375,7 @@ POST `{host}/chat/completions` (OpenAI-сумісний):
 
 ## 5. Webview API: webview_app.py
 
-**2884 рядки.** Запускає PyWebView-вікно (1180×820, resizable) з вбудованим React SPA. Клас `Api` (рядок 731) — усі його публічні (без підкреслення) методи автоматично стають доступні в JS як `window.pywebview.api.*`.
+**~2 900 рядків.** Запускає PyWebView-вікно (1180×820, resizable) з вбудованим React SPA. Клас `Api` (рядок 731) — усі його публічні (без підкреслення) методи автоматично стають доступні в JS як `window.pywebview.api.*`.
 
 ### 5.1 Запуск
 
@@ -491,7 +491,7 @@ Stdout читається рядок за рядком у окремому по�
 
 ## 6. Допоміжні модулі
 
-### 6.1 report.py (1701 рядок)
+### 6.1 report.py (~1 700 рядків)
 
 Генерація звітів з JSONL. Імпортує лише `report_i18n` — з `dossier_charts_html.py`/`dossier_html_summary.py` не пов'язаний напряму (композицію HTML "таблиця → графіки → резюме" виконує `webview_app.py`, а не сам `report.py`).
 
@@ -501,11 +501,11 @@ Stdout читається рядок за рядком у окремому по�
 - `write_filterable_html()` → інтерактивний HTML-звіт (наступник старого `make_table_html`): master/detail таблиця з розгортанням по декларації, картки знахідок із severity-бейджами й доказами, блок сім'ї/активів, фільтри та сортування, показ/приховування стовпців, позначки рядків (localStorage), посилання на оригінал декларації через `nazk_public_declaration_url()` (`https://public.nazk.gov.ua/documents/{uuid}`), блок помилок прогону, і хронологічне сортування для режиму досьє (`sort_rows_dossier_chronological`, активне при `--dossier-chronological` або коли вхідний шлях усередині `deep_research/`)
 - `write_extras_html()` / `--extras-only` — **позначено як deprecated**, тепер лише викликає `write_filterable_html` з попередженням
 
-### 6.2 report_i18n.py (92 рядки)
+### 6.2 report_i18n.py (~90 рядків)
 
 **Не** мовний перемикач UI — це таблиця відповідників англ.-кодів → українських підписів для значень з JSON-аналізу LLM (`FINDING_TYPE_UK`, `RISK_LEVEL_UK`/`SEVERITY_UK`, `PROFILE_FIELD_UK`), плюс сортувальні хелпери (`severity_sort_rank`, `RISK_LEVEL_FILTER_ORDER`). Використовується `report.py` та `usage_dashboard.py`, щоб показувати `finding.type`/`risk_level`/ключі профілю українською в HTML/дашборді. Виходу англійською не додає — це суто локалізація підписів для звітів.
 
-### 6.3 dossier_charts.py (287 рядків) і dossier_charts_html.py (412 рядків)
+### 6.3 dossier_charts.py (~290 рядків) і dossier_charts_html.py (~410 рядків)
 
 Чіткий поділ дані/рендер:
 
@@ -514,7 +514,7 @@ Stdout читається рядок за рядком у окремому по�
 
 Конфігурація графіків (назви, кольори, серії) продубльована на фронтенді у `declarator-lm/src/dossierChartConfig.js` — той самий набір графіків рендериться і живим React-компонентом (`DossierCharts.jsx`, під час обробки), і статичним HTML-звітом (`dossier_charts_html.py`, після завершення); обидва споживають одну й ту саму функцію `build_dossier_chart_series()`.
 
-### 6.4 dossier_html_summary.py (336 рядків)
+### 6.4 dossier_html_summary.py (~340 рядків)
 
 Генерує текстовий підсумок-досьє, дописуючи його в HTML-звіт:
 - Зчитує `report_table.html` (уже після вставки графіків) → `prepare_html_for_prompt()`: знімає `<script>`-теги, обрізає до 250 000 символів
@@ -524,7 +524,7 @@ Stdout читається рядок за рядком у окремому по�
 
 Підтримує також **порівняння кількох моделей на рівні досьє**: `build_dossier_models_comparison_report()` запускає той самий досьє-промпт через 2–4 обрані моделі й рендерить окремий HTML із картками відповідей поряд (`<section id="declarator-dossier-model-compare">`) — окремо від однодекларативного `debug_compare_models_html` у `webview_app.py`.
 
-### 6.5 usage_dashboard.py (387 рядків)
+### 6.5 usage_dashboard.py (~390 рядків)
 
 Обчислює агрегований payload для дашборду використання (простій головного вікна, `UsageDashboard.jsx`). Два джерела даних:
 - **`analysis_results.jsonl`** (через `report.read_jsonl`/`dedupe_by_latest`) → `aggregate_dashboard()`: розподіл за рівнем ризику, середній/медіанний risk score, сума red flags, топ типів знахідок, кількість по моделях/роках, декларація з найвищим ризиком, загальний час аналізу, середній час на декларацію, і оцінка "заощадженого часу" порівняно з ручною перевіркою (константа `MANUAL_REVIEW_MINUTES = 10` — це оцінка людино-часу, не облік вартості в грошах).
@@ -545,7 +545,7 @@ if __name__ == "__main__":
 
 Тонка обгортка, не окремий застосунок: виставляє змінну середовища **до** імпорту `webview_app`, після чого викликає той самий `webview_app.main()`. Еквівалент з боку batch-файлу — `run_en.bat` (`set DECLARATOR_UI_LANG=en && python webview_app.py`).
 
-### 6.7 deep_research_bridge.py (643 рядки)
+### 6.7 deep_research_bridge.py (~640 рядків)
 
 Місток між `webview_app.py` і незалежним модулем `nazk_parser/`. Огорнутий маркерами `# --- DEEP_RESEARCH_BEGIN/END` — за задумом автора, всю фічу Deep Research можна вимкнути, видаливши цей файл і його виклики в `webview_app.py`. Динамічно додає `nazk_parser/` у `sys.path` при кожному виклику (а не імпортує як пакет).
 
@@ -556,7 +556,7 @@ if __name__ == "__main__":
 - `_format_nazk_diag(...)` — спільний людський формат помилки (HTTP-статус, текст, URL) для всіх трьох сценаріїв завантаження.
 - Захист від виходу за межі проєкту — дві незалежні перевірки: `_safe_deep_research_subdir()` (для списку/застосування папки: без `..`, без роздільників шляху) і `_output_dir_must_be_under_project()` (для завантаження: цільова папка повинна лишатись під коренем проєкту після `resolve()`).
 
-### 6.8 openrouter_client.py (986 рядків)
+### 6.8 openrouter_client.py (~990 рядків)
 
 OpenAI-сумісний клієнт тільки на stdlib:
 - `call_openrouter(model, system, user, host, api_key, ...)` → dict з аналізом
@@ -575,12 +575,12 @@ OpenAI-сумісний клієнт тільки на stdlib:
   - `GET /documents/list?page=...&user_declarant_id=...&declaration_type=...&declaration_year=...` — сторінкований список
   - `GET /documents/{document_id}` — повна декларація за id
   - Публічна картка декларації для людини (не API): `https://public.nazk.gov.ua/documents/{uuid}`
-- `nazk_client.py` (259 рядків): `urllib`-обгортка з ретраями (до 8 спроб) на 429/500/502/503/504, honoring `Retry-After` для 429 (клемп 8–120с); `fetch_list_page()`, `fetch_document()`.
-- `nazk_download.py` (308 рядків): `download_professional_dataset()` (пейджинг до ліміту файлів), `peek_first_lastname()` (перше прізвище за user_declarant_id — щоб назвати папку до повного завантаження), `download_all_for_user_declarant()` (усі декларації суб'єкта, з `on_progress`-колбеком), `download_with_filters()` (фільтрована вибірка з локальним застосуванням критеріїв), `scan_local_folder()` (без мережі — пошук у вже завантажених файлах).
-- `filters.py` (107 рядків): `FilterCriteria` (рік/діапазон років/підрядок місця роботи/прізвища/імені), `matches_filters()`, `row_preview()` для попереднього перегляду в UI.
-- `nazk_parser/main.py` (82 рядки) — самостійний CLI (`python main.py` з теки `nazk_parser/`): `--save-dir`, `--limit`, `--delay`, `--query`, `--user-declarant-id`, `--declaration-year`, `--declaration-type`, `--document-type`. Не є частиною основного пайплайну — підключається через `deep_research_bridge.py`.
+- `nazk_client.py` (~260 рядків): `urllib`-обгортка з ретраями (до 8 спроб) на 429/500/502/503/504, honoring `Retry-After` для 429 (клемп 8–120с); `fetch_list_page()`, `fetch_document()`.
+- `nazk_download.py` (~310 рядків): `download_professional_dataset()` (пейджинг до ліміту файлів), `peek_first_lastname()` (перше прізвище за user_declarant_id — щоб назвати папку до повного завантаження), `download_all_for_user_declarant()` (усі декларації суб'єкта, з `on_progress`-колбеком), `download_with_filters()` (фільтрована вибірка з локальним застосуванням критеріїв), `scan_local_folder()` (без мережі — пошук у вже завантажених файлах).
+- `filters.py` (~110 рядків): `FilterCriteria` (рік/діапазон років/підрядок місця роботи/прізвища/імені), `matches_filters()`, `row_preview()` для попереднього перегляду в UI.
+- `nazk_parser/main.py` (~80 рядків) — самостійний CLI (`python main.py` з теки `nazk_parser/`): `--save-dir`, `--limit`, `--delay`, `--query`, `--user-declarant-id`, `--declaration-year`, `--declaration-type`, `--document-type`. Не є частиною основного пайплайну — підключається через `deep_research_bridge.py`.
 
-### 6.10 launcher_gui.py (1029 рядків)
+### 6.10 launcher_gui.py (~1 000 рядків)
 
 **Не є точкою входу зібраного EXE** (це виправлення до попередньої версії цього документа — `DeclaratorLM.spec` збирає `webview_app.py`, `launcher_gui.py` у спеку не входить і ніде більше в проєкті не імпортується). Це самостійний, повністю незалежний від pywebview/React **Tkinter-лаунчер**: власне вікно `Tk`/`ttk` з тими самими полями налаштувань, що й `DEFAULTS` у `webview_app.py`, читає/пише той самий `settings.json`, запускає `main.py` через `subprocess.Popen` і стрімить stdout у текстовий віджет, керує тим самим `.run_control.json` (пауза/стоп), а після прогону також викликає `dossier_html_summary`/`dossier_charts_html`. Придатний як легка альтернатива GUI без npm/Vite/pywebview — наприклад, для середовищ, де немає .NET/EdgeChromium.
 
@@ -600,25 +600,25 @@ OpenAI-сумісний клієнт тільки на stdlib:
 
 ## 7. Фронтенд: declarator-lm/
 
-**Стек:** React 18 + Vite 5 + Geist шрифт. `App.jsx` — 7247 рядків, один головний компонент без роутера й без бібліотеки керування станом (тільки `useState`/`useEffect`).
+**Стек:** React 18 + Vite 5 + Geist шрифт. `App.jsx` — ~7 300 рядків, один головний компонент без роутера й без бібліотеки керування станом (тільки `useState`/`useEffect`).
 
 ### 7.1 Структура
 
 ```
 declarator-lm/
 ├── src/
-│   ├── App.jsx               # Головний UI, 7247 рядків
-│   ├── DossierPanel.jsx      # Живий вигляд "досьє" під час Deep Research (415 рядків)
-│   ├── DossierCharts.jsx     # Три анімовані SVG-графіки досьє (320 рядків)
-│   ├── UsageDashboard.jsx    # Дашборд "Зведення за весь час" (535 рядків)
-│   ├── VisualLogPanel.jsx    # Картковий живий лог обробки (859 рядків)
-│   ├── dossierChartConfig.js # Спільна конфігурація графіків досьє (126 рядків)
+│   ├── App.jsx               # Головний UI, ~7 300 рядків
+│   ├── DossierPanel.jsx      # Живий вигляд "досьє" під час Deep Research (~420 рядків)
+│   ├── DossierCharts.jsx     # Три анімовані SVG-графіки досьє (~320 рядків)
+│   ├── UsageDashboard.jsx    # Дашборд "Зведення за весь час" (~540 рядків)
+│   ├── VisualLogPanel.jsx    # Картковий живий лог обробки (~860 рядків)
+│   ├── dossierChartConfig.js # Спільна конфігурація графіків досьє (~130 рядків)
 │   ├── index.css             # Стилі (~3900 рядків)
 │   ├── main.jsx / main.en.jsx # Дві точки входу Vite (українська/англійська)
 │   └── i18n/
 │       ├── index.jsx         # React-контекст I18nProvider/useI18n/useT
-│       ├── enCatalog.js      # Словник укр.→англ. точних відповідників (558 рядків)
-│       └── domTranslate.js   # DOM-перекладач на основі MutationObserver (58 рядків)
+│       ├── enCatalog.js      # Словник укр.→англ. точних відповідників (~560 рядків)
+│       └── domTranslate.js   # DOM-перекладач на основі MutationObserver (~60 рядків)
 ├── index.html / index.en.html # Дві HTML-точки входу (lang="uk" / lang="en")
 ├── dist/                     # Зібраний SPA (включається в PyInstaller EXE)
 ├── package.json              # declarator-lm@0.3.0, React 18, Vite 5, @fontsource/geist(-mono)
@@ -634,7 +634,7 @@ declarator-lm/
 | `TooltipWrap` | Обгортка з tooltip на hover |
 | `LabelWithTooltip` | Лейбл з іконкою підказки |
 | `ModelCombobox` | Комбобокс вибору моделі з пошуком |
-| `DossierPanel` | `NowCard` (поточна особа, risk-гейдж, статус обробки), `DossierProgressStrip` — верхній прогрес-бар режиму досьє; вбудовує `DossierCharts` знизу |
+| `DossierPanel` | `NowCard` (поточна особа, risk-гейдж, статус обробки), `DossierProgressStrip` — верхній прогрес-бар режиму досьє; вбудовує `DossierCharts` знизу. Поки `deepResearchActive === true`, кореневий контейнер отримує клас `app--deep-research` (`className={`app${deepResearchActive ? " app--deep-research" : ""}`}`) — акцентний колір інтерфейсу перемикається із синього на червоний на весь час обробки досьє |
 | `DossierCharts` | Три графіки (risk/фінанси/майно) по роках, з тултипами й легендою, що вмикається/вимикається; єдиний компонент, що явно використовує `useI18n` |
 | `UsageDashboard` | Плитки з підсумками (час аналізу, заощаджений час, red flags, середній risk, найризикованіша декларація, останній сеанс), автоперегортання кожні 10с |
 | `VisualLogPanel` | Картки обробки (`OkCard`/`ErrorCard`/`LimitCard`/`ProcessingCard`) з risk-гейджем, тегами знахідок, вартістю/тривалістю, FLIP-анімацією, перемиканням "картки/текст", інлайновими діями розбору помилок (retry/ignore/raise-limits) |
@@ -834,7 +834,8 @@ React                         pywebview API
 
 - Завантаження всіх декларацій особи за НАЗК `user_declarant_id` → `deep_research/{ПІБ}_{id}/`, або застосування вже наявної папки без нового звернення до API
 - Хронологічна обробка (найстаріші → найновіші)
-- Живий вигляд «Досьє» під час обробки (графіки оновлюються по мірі надходження результатів)
+- Живий вигляд «Досьє» під час обробки (графіки оновлюються по мірі надходження результатів; на час обробки акцентний колір інтерфейсу перемикається із синього на червоний)
+- `move_processed` у цьому режимі **ігнорується ще до старту subprocess**: `webview_app.py` (`run_pipeline`) обчислює `under_deep_research = _is_under_deep_research(input_dir_arg)` і додає `--processed-dir` до команди `main.py` лише за умови `move_processed and not under_deep_research` — тобто в режимі досьє прапорець просто не передається, незалежно від стану чекбокса, і файли лишаються на місці для повторної хронологічної обробки. UI відповідно дизейблить тоглер «Переміщати оброблені JSON» і показує пояснення
 - HTML-звіт з графіками динаміки по роках + LLM-резюме досьє в кінці
 
 ### 9.3 Dossier Summary (DEBUG)
@@ -877,18 +878,18 @@ python main.py \
 ```
 DeclaratorLM/
 │
-├── main.py                       # 3075 рядків: compact v2, LLM, пайплайн, CLI
-├── webview_app.py                # 2884 рядки: PyWebView API (UA), subprocess-міст
+├── main.py                       # ~3 100 рядків: compact v2, LLM, пайплайн, CLI
+├── webview_app.py                # ~2 900 рядків: PyWebView API (UA), subprocess-міст
 ├── webview_app_en.py             # 13 рядків: той самий сервер англійською
-├── openrouter_client.py          # 986 рядків: OpenRouter API клієнт
-├── deep_research_bridge.py       # 643 рядки: НАЗК API, завантаження декларацій
-├── report.py                     # 1701 рядок: CSV, інтерактивний HTML-звіт
-├── report_i18n.py                # 92 рядки: українські підписи значень аналізу
-├── dossier_charts.py             # 287 рядків: часові ряди для графіків досьє
-├── dossier_charts_html.py        # 412 рядків: вбудовування графіків у HTML-звіт
-├── dossier_html_summary.py       # 336 рядків: LLM-резюме досьє + порівняння моделей
-├── usage_dashboard.py            # 387 рядків: агрегована статистика використання
-├── launcher_gui.py               # 1029 рядків: незалежний Tkinter-лаунчер (не EXE-точка входу)
+├── openrouter_client.py          # ~990 рядків: OpenRouter API клієнт
+├── deep_research_bridge.py       # ~640 рядків: НАЗК API, завантаження декларацій
+├── report.py                     # ~1 700 рядків: CSV, інтерактивний HTML-звіт
+├── report_i18n.py                # ~90 рядків: українські підписи значень аналізу
+├── dossier_charts.py             # ~290 рядків: часові ряди для графіків досьє
+├── dossier_charts_html.py        # ~410 рядків: вбудовування графіків у HTML-звіт
+├── dossier_html_summary.py       # ~340 рядків: LLM-резюме досьє + порівняння моделей
+├── usage_dashboard.py            # ~390 рядків: агрегована статистика використання
+├── launcher_gui.py               # ~1 000 рядків: незалежний Tkinter-лаунчер (не EXE-точка входу)
 │
 ├── requirements.txt              # pywebview>=4,<6; psutil>=5.9,<8; pythonnet>=3.0.1,<4
 ├── DeclaratorLM.spec             # PyInstaller onefile spec (entry point: webview_app.py)
@@ -898,12 +899,12 @@ DeclaratorLM/
 │
 ├── declarator-lm/                # React SPA
 │   ├── src/
-│   │   ├── App.jsx               # 7247 рядків: основний UI
-│   │   ├── DossierPanel.jsx      # 415 рядків: живий вигляд досьє
-│   │   ├── DossierCharts.jsx     # 320 рядків: графіки досьє
-│   │   ├── UsageDashboard.jsx    # 535 рядків: дашборд використання
-│   │   ├── VisualLogPanel.jsx    # 859 рядків: картковий лог обробки
-│   │   ├── dossierChartConfig.js # 126 рядків: конфігурація графіків
+│   │   ├── App.jsx               # ~7 300 рядків: основний UI
+│   │   ├── DossierPanel.jsx      # ~420 рядків: живий вигляд досьє
+│   │   ├── DossierCharts.jsx     # ~320 рядків: графіки досьє
+│   │   ├── UsageDashboard.jsx    # ~540 рядків: дашборд використання
+│   │   ├── VisualLogPanel.jsx    # ~860 рядків: картковий лог обробки
+│   │   ├── dossierChartConfig.js # ~130 рядків: конфігурація графіків
 │   │   ├── i18n/                 # index.jsx, enCatalog.js, domTranslate.js
 │   │   └── index.css             # ~3900 рядків: стилі
 │   ├── index.html / index.en.html # Дві точки входу Vite
@@ -970,7 +971,7 @@ pyinstaller DeclaratorLM.spec
 |--------|-------------|
 | `BUILD_FRONTEND.bat` | Збірка фронтенду (`npm run build`) |
 | `run_en.bat` | Запуск застосунку з англійським інтерфейсом (`DECLARATOR_UI_LANG=en`) |
-| `reasoning.bat` | Запуск із увімкненим reasoning/THINK-стрімінгом (`DECLARATOR_REASONING_DEBUG=1`) |
+| `reasoning.bat` | ⚠️ WIP: запуск із увімкненим reasoning/THINK-стрімінгом (`DECLARATOR_REASONING_DEBUG=1`) |
 
 ### 11.4 Python-залежності
 

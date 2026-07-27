@@ -3,6 +3,15 @@ import { createPortal } from "react-dom";
 import UsageDashboard from "./UsageDashboard";
 import VisualLogPanel from "./VisualLogPanel";
 import DossierPanel, { DossierProgressStrip, dossierProgressMeta } from "./DossierPanel";
+import { useI18n } from "./i18n";
+import {
+  AboutProgramBodyEn,
+  CloudHelpBodyEn,
+  CloudWarningBodyEn,
+  CompactModeHelpBodyEn,
+  DeepResearchDownloadHintEn,
+  DeepResearchExistingHintEn,
+} from "./i18n/modalsEn";
 import "./index.css";
 
 /** Version shown in the header and in "About the program". */
@@ -829,6 +838,7 @@ function AdvancedOutputFilesModal({
 }
 
 function CompactModeHelpModal({ onClose }) {
+  const { locale } = useI18n();
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") onClose();
@@ -850,6 +860,10 @@ function CompactModeHelpModal({ onClose }) {
           Режим компактизації
         </div>
         <div className="cloud-modal-body about-program-body compact-mode-help-body">
+          {locale === "en" ? (
+            <CompactModeHelpBodyEn />
+          ) : (
+            <>
           <p className="about-program-lead">
             Декларація з реєстру НАЗК — це великий і «шумний» JSON: десятки технічних полів,
             службові коди, дублі та порожні розділи. Передавати його моделі цілком — дорого,
@@ -906,6 +920,8 @@ function CompactModeHelpModal({ onClose }) {
             порожнім, поверхневим або модель «не побачила» якийсь актив — увімкніть{" "}
             <strong>Детальніше</strong> й перезапустіть аналіз цієї декларації.
           </p>
+            </>
+          )}
         </div>
         <div className="cloud-modal-actions">
           <button type="button" className="btn-primary" onClick={onClose}>
@@ -1110,6 +1126,7 @@ function CloudSettingsModal({
   pipelineMaxConcurrent = 1,
   onPipelineMaxConcurrentChange,
 }) {
+  const { locale } = useI18n();
   const [error, setError] = useState("");
   const [testState, setTestState] = useState({ loading: false, ok: null, message: "" });
   const [cloudHelpOpen, setCloudHelpOpen] = useState(false);
@@ -1570,6 +1587,10 @@ function CloudSettingsModal({
             Як налаштувати Cloud режим
           </h2>
           <div className="cloud-help-body">
+            {locale === "en" ? (
+              <CloudHelpBodyEn />
+            ) : (
+              <>
             <h3 className="cloud-help-subtitle">Що це взагалі таке?</h3>
             <p>
               У програми є два режими роботи. <strong>Local</strong> — модель працює прямо на вашому комп&apos;ютері
@@ -1659,6 +1680,8 @@ function CloudSettingsModal({
                 </ul>
               </li>
             </ol>
+              </>
+            )}
           </div>
           <div className="cloud-help-footer">
             <button type="button" className="btn-primary" onClick={() => setCloudHelpOpen(false)}>
@@ -1673,6 +1696,7 @@ function CloudSettingsModal({
 }
 
 function AboutProgramModal({ onClose, onOpenWelcome, showHeaderTaglines, onShowHeaderTaglinesChange }) {
+  const { locale } = useI18n();
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") onClose();
@@ -1694,6 +1718,10 @@ function AboutProgramModal({ onClose, onOpenWelcome, showHeaderTaglines, onShowH
           Про ДеклараторLM
         </div>
         <div className="cloud-modal-body about-program-body">
+          {locale === "en" ? (
+            <AboutProgramBodyEn version={APP_UI_VERSION} />
+          ) : (
+            <>
           <p className="about-program-lead">
             <strong>DeclaratorLM</strong>
             {" "}
@@ -1747,6 +1775,8 @@ function AboutProgramModal({ onClose, onOpenWelcome, showHeaderTaglines, onShowH
             {" · "}
             Версія: <code className="deep-research-code about-program-version">{APP_UI_VERSION}</code>
           </p>
+            </>
+          )}
         </div>
         <div className="cloud-modal-actions about-program-modal-actions">
           <div className="about-program-footer-toggle">
@@ -2558,11 +2588,16 @@ function CloudComparisonModal({
 }
 
 function CloudWarningModal({ onConfirm, onCancel }) {
+  const { locale } = useI18n();
   return (
     <div className="cloud-modal-overlay">
       <div className="cloud-modal cloud-warning-modal">
         <div className="cloud-modal-title">Увімкнути Cloud Mode?</div>
         <div className="cloud-warning-text">
+          {locale === "en" ? (
+            <CloudWarningBodyEn />
+          ) : (
+            <>
           <p>
             У цьому режимі DeclaratorLM використовує зовнішні AI-сервіси (Ollama Cloud або
             OpenRouter) для аналізу декларацій.
@@ -2571,6 +2606,8 @@ function CloudWarningModal({ onConfirm, onCancel }) {
             Публічні декларації НАЗК зазвичай безпечно обробляти у Cloud Mode.
           </p>
           <p>Для приватних або чутливих документів рекомендується Local Mode.</p>
+            </>
+          )}
           <div className="cloud-warning-footer">
             <p className="cloud-warning-privacy">
               Детальніше про обробку даних та політику конфіденційності:
@@ -2617,6 +2654,7 @@ function DeepResearchModal({
   onSubmitDownload,
   onApplyExisting,
 }) {
+  const { locale } = useI18n();
   const hasReadyFolders = folders.some((f) => f.decl_count > 0);
   const modalRef = useRef(null);
   useSmoothModalResize(modalRef);
@@ -2657,11 +2695,15 @@ function DeepResearchModal({
             render={(activeTab) =>
               activeTab === "download" ? (
                 <>
+                  {locale === "en" ? (
+                    <DeepResearchDownloadHintEn />
+                  ) : (
                   <p className="deep-research-hint">
                     Вкажіть <strong>user_declarant_id</strong> з відкритого API НАЗК. Будуть завантажені доступні
                     декларації цієї особи у каталог <code className="deep-research-code">deep_research/</code> під
                     іменем за прізвищем.
                   </p>
+                  )}
                   <label className="cloud-label">user_declarant_id</label>
                   <input
                     className="field-input"
@@ -2676,11 +2718,15 @@ function DeepResearchModal({
                 </>
               ) : (
                 <>
+                  {locale === "en" ? (
+                    <DeepResearchExistingHintEn />
+                  ) : (
                   <p className="deep-research-hint">
                     Оберіть підкаталог у <code className="deep-research-code">deep_research/</code> з уже завантаженими
                     файлами <code className="deep-research-code">decl_*.json</code>. Пайплайн використає їх як чергу
                     без звернення до API.
                   </p>
+                  )}
                   <div className="deep-research-folder-row">
                     <label className="cloud-label">Папка</label>
                     <button

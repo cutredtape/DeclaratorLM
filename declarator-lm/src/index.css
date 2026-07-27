@@ -3811,9 +3811,9 @@ body {
 }
 
 .visual-log-card--stacked .visual-log-card-btn {
-  flex: 1 1 auto;
-  min-height: 32px;
-  padding: 6px 12px;
+  flex: 0 1 auto;
+  min-height: 30px;
+  padding: 6px 14px;
   font-size: 12px;
 }
 
@@ -3893,9 +3893,51 @@ body {
   box-sizing: border-box;
 }
 .visual-log-card-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-size: 11px;
+  font-family: var(--font-ui);
+  font-weight: 600;
   padding: 5px 10px;
   min-height: 0;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.visual-log-card-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.visual-log-card-btn--accent {
+  background: rgba(37, 99, 235, 0.14);
+  border-color: rgba(37, 99, 235, 0.32);
+  color: #60A5FA;
+}
+.visual-log-card-btn--accent:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.24);
+  border-color: rgba(37, 99, 235, 0.5);
+}
+.visual-log-card-btn--warn {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.32);
+  color: var(--warn);
+}
+.visual-log-card-btn--warn:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.24);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+.visual-log-card-btn--ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+.visual-log-card-btn--ghost:hover:not(:disabled) {
+  background: var(--panel-hover);
+  border-color: var(--border);
+  color: var(--text);
 }
 .visual-log-tag-ignored {
   background: var(--surface);

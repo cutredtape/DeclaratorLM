@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "./i18n";
 
 const FLIP_INTERVAL_MS = 10000;
 const AUTO_FLIP_STORAGE_KEY = "usageDashAutoFlip";
@@ -359,6 +360,7 @@ function TileLastSession({ last }) {
 }
 
 export default function UsageDashboard({ stats, loading, error }) {
+  const { t: tr } = useI18n();
   const [autoFlipTiles, setAutoFlipTiles] = useState(readAutoFlipPreference);
 
   const setAutoFlipTilesPersisted = useCallback((on) => {
@@ -461,7 +463,7 @@ export default function UsageDashboard({ stats, loading, error }) {
               {risks.map((r) => (
                 <div key={r.level} className="usage-dash-risk-line">
                   <span className="usage-dash-risk-dot" style={{ background: r.color }} />
-                  <span className="usage-dash-risk-name">{r.label}</span>
+                  <span className="usage-dash-risk-name">{tr(r.label)}</span>
                   <span className="usage-dash-risk-count" style={{ color: r.color }}>
                     {fmtInt(r.count)}
                   </span>
@@ -515,7 +517,7 @@ export default function UsageDashboard({ stats, loading, error }) {
                 stats.finding_types.map((f, i) => (
                   <div key={f.type} className="usage-dash-find-item">
                     <span className="usage-dash-find-rank">{i + 1}</span>
-                    <span className="usage-dash-find-name">{f.label}</span>
+                    <span className="usage-dash-find-name">{tr(f.label)}</span>
                     <span className="usage-dash-find-track">
                       <span
                         className="usage-dash-find-fill"
