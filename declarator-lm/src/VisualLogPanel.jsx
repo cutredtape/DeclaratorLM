@@ -1,3 +1,4 @@
+/** Card-based live processing log: per-declaration cards with risk gauge, cost, and status. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./i18n";
 

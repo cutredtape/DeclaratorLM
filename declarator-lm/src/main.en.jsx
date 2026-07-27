@@ -1,3 +1,4 @@
+/** Vite entry point: the English UI (index.en.html) — same App, plus the DOM translator. */
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

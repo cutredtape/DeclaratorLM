@@ -1,3 +1,4 @@
+"""Standalone Tkinter launcher — a lightweight alternative to the PyWebView GUI (not the packaged EXE's entry point)."""
 import json
 import os
 import re

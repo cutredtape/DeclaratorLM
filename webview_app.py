@@ -1,3 +1,4 @@
+"""PyWebView desktop app (Ukrainian UI): hosts the React frontend and runs main.py as a subprocess."""
 import runpy
 import sys
 from pathlib import Path

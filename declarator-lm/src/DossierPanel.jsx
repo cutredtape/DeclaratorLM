@@ -1,3 +1,4 @@
+/** Live "dossier" view during Deep Research: current-person card, progress strip, embeds DossierCharts. */
 import { useEffect, useMemo, useState } from "react";
 import DossierCharts from "./DossierCharts";
 import { RISK_COLORS, RISK_LEVEL_UK, levelOf } from "./dossierChartConfig";

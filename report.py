@@ -1,3 +1,4 @@
+"""Generate the summary/findings CSVs and the interactive HTML report from analysis_results.jsonl."""
 import argparse
 import csv
 import json

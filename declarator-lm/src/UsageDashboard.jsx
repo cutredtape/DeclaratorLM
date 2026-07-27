@@ -1,3 +1,4 @@
+/** All-time usage summary shown when the app is idle: processed count, risk breakdown, time saved. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./i18n";
 

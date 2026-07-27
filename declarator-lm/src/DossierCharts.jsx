@@ -1,3 +1,4 @@
+/** Three animated SVG charts (risk, finances, property) shown while a dossier is being processed. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DOSSIER_CHARTS,

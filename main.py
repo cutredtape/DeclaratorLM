@@ -1,3 +1,4 @@
+"""Core pipeline: compact v2 declaration cleanup, LLM calls (Ollama/OpenRouter), response normalization, and the CLI entry point."""
 import argparse
 import json
 import os

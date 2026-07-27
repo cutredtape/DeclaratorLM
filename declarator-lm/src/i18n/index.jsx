@@ -1,3 +1,4 @@
+/** React context providing the current UI locale and the t() translation helper. */
 import { createContext, useContext, useMemo } from "react";
 import { enCatalog } from "./enCatalog";
 

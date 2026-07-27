@@ -1,3 +1,4 @@
+/** Main UI: settings, pipeline controls, live log, and reports — the whole DeclaratorLM window. */
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import UsageDashboard from "./UsageDashboard";
