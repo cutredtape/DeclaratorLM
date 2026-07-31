@@ -1008,10 +1008,10 @@ function FilePathInput({ label, tooltip, value, onChange, onBrowse, disabled = f
   );
 }
 
-function Toggle({ label, tooltip, checked, onChange, disabled = false, compact = false }) {
+export function Toggle({ label, tooltip, checked, onChange, disabled = false, compact = false, className = "" }) {
   return (
     <label
-      className={`toggle-row${disabled ? " toggle-row--disabled" : ""}${compact ? " toggle-row--compact" : ""}`}
+      className={`toggle-row${disabled ? " toggle-row--disabled" : ""}${compact ? " toggle-row--compact" : ""}${className ? ` ${className}` : ""}`}
       aria-disabled={disabled}
     >
       <span
@@ -2571,7 +2571,7 @@ function CloudComparisonModal({
               </svg>
             </button>
           </TooltipWrap>
-          <button type="button" className="btn-secondary" onClick={onCancel}>Закрити</button>
+          <button type="button" className="btn-secondary" onClick={onCancel}>Скасувати</button>
           <button type="button" className="btn-primary" onClick={handleConfirm} disabled={!canConfirm}>
             OK
           </button>

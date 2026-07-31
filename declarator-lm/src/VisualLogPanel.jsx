@@ -1,6 +1,7 @@
 /** Card-based live processing log: per-declaration cards with risk gauge, cost, and status. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./i18n";
+import RiskGauge, { useReducedMotion } from "./RiskGauge";
 
 const TAB_SWITCH_MS = 700;
 const FEED_FLIP_MS = 700;
@@ -81,18 +82,6 @@ function sortProcessedEntries(entries, sortKey, sortAsc) {
     return 0;
   });
   return list;
-}
-
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReduced(Boolean(mq.matches));
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
-  return reduced;
 }
 
 /**
@@ -226,61 +215,6 @@ function CardActionRow({ entry, showActions, busy, onRetry, onIgnore, onRaiseLim
   );
 }
 
-function RiskGauge({ score }) {
-  const reduced = useReducedMotion();
-  const lvl = levelOf(score);
-  const color = RISK_LEVELS[lvl].var;
-  const r = 22;
-  const c = 2 * Math.PI * r;
-  const safe = Math.max(0, Math.min(100, Number(score) || 0));
-  const off = c * (1 - safe / 100);
-  const [display, setDisplay] = useState(reduced ? safe : 0);
-  const [dashOff, setDashOff] = useState(reduced ? off : c);
-
-  useEffect(() => {
-    if (reduced) {
-      setDisplay(safe);
-      setDashOff(off);
-      return undefined;
-    }
-    setDashOff(c);
-    const t0 = performance.now();
-    const dur = 1800;
-    let raf;
-    const tick = (now) => {
-      const t = Math.min(1, (now - t0) / dur);
-      const eased = 1 - (1 - t) ** 3;
-      setDisplay(Math.round(eased * safe));
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    const tArc = window.setTimeout(() => setDashOff(off), 50);
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.clearTimeout(tArc);
-    };
-  }, [safe, off, c, reduced]);
-
-  return (
-    <div className="visual-log-gauge" style={{ "--risk-color": color }}>
-      <svg width="52" height="52" viewBox="0 0 52 52" aria-hidden>
-        <circle className="visual-log-gauge-track" cx="26" cy="26" r={r} fill="none" strokeWidth="4" />
-        <circle
-          className="visual-log-gauge-arc"
-          cx="26"
-          cy="26"
-          r={r}
-          fill="none"
-          strokeWidth="4"
-          strokeDasharray={c}
-          strokeDashoffset={dashOff}
-        />
-      </svg>
-      <div className="visual-log-gauge-score">{display}</div>
-    </div>
-  );
-}
-
 function PendingDots() {
   return (
     <div className="visual-log-pending-dots" aria-hidden>
@@ -305,7 +239,7 @@ function OkCard({ entry, enterAnim }) {
       style={{ "--risk-color": meta.var }}
       data-flip-key={entry.source_file || undefined}
     >
-      <RiskGauge score={entry.score} />
+      <RiskGauge score={entry.score} color={meta.var} />
       <div className="visual-log-card-main">
         <div className="visual-log-card-name">{entry.name || entry.source_file}</div>
         <div className="visual-log-card-pos">{cardPos(entry)}</div>

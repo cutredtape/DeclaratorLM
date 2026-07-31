@@ -1,5 +1,6 @@
 /** All-time usage summary shown when the app is idle: processed count, risk breakdown, time saved. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Toggle } from "./App";
 import { useI18n } from "./i18n";
 
 const FLIP_INTERVAL_MS = 10000;
@@ -14,26 +15,6 @@ function readAutoFlipPreference() {
     /* ignore */
   }
   return true;
-}
-
-function DashAutoFlipToggle({ checked, onChange }) {
-  return (
-    <label className="toggle-row toggle-row--compact usage-dash-auto-flip">
-      <span
-        className={`toggle-switch ${checked ? "on" : ""}`}
-        role="switch"
-        aria-checked={checked}
-        aria-label="Автоматична зміна плиток"
-        onClick={(e) => {
-          e.preventDefault();
-          onChange(!checked);
-        }}
-      >
-        <span className="toggle-thumb" />
-      </span>
-      <span className="toggle-label">Автоматична зміна плиток</span>
-    </label>
-  );
 }
 
 function fmtInt(n) {
@@ -383,7 +364,13 @@ export default function UsageDashboard({ stats, loading, error }) {
       <div className="usage-dash">
         <div className="usage-dash-top">
           <div className="usage-dash-head">Зведення за весь час</div>
-          <DashAutoFlipToggle checked={autoFlipTiles} onChange={setAutoFlipTilesPersisted} />
+          <Toggle
+            label="Автоматична зміна плиток"
+            checked={autoFlipTiles}
+            onChange={setAutoFlipTilesPersisted}
+            compact
+            className="usage-dash-auto-flip"
+          />
         </div>
         <div className="usage-dash-sub">Завантаження статистики…</div>
         <div className="usage-dash-layout usage-dash-layout--loading">
@@ -424,7 +411,13 @@ export default function UsageDashboard({ stats, loading, error }) {
     <div className="usage-dash" key={dataKey}>
       <div className="usage-dash-top">
         <div className="usage-dash-head">Зведення за весь час</div>
-        <DashAutoFlipToggle checked={autoFlipTiles} onChange={setAutoFlipTilesPersisted} />
+        <Toggle
+          label="Автоматична зміна плиток"
+          checked={autoFlipTiles}
+          onChange={setAutoFlipTilesPersisted}
+          compact
+          className="usage-dash-auto-flip"
+        />
       </div>
       {empty ? (
         <p className="usage-dash-empty-hint">Запустіть аналіз, щоб накопичити дані.</p>

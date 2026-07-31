@@ -1,6 +1,7 @@
 /** Live "dossier" view during Deep Research: current-person card, progress strip, embeds DossierCharts. */
 import { useEffect, useMemo, useState } from "react";
 import DossierCharts from "./DossierCharts";
+import RiskGauge from "./RiskGauge";
 import { RISK_COLORS, RISK_LEVEL_UK, levelOf } from "./dossierChartConfig";
 import { useI18n } from "./i18n";
 
@@ -36,46 +37,6 @@ function declCountLabel(n) {
   if (k === 1) return "декларацію";
   if (k >= 2 && k <= 4) return "декларації";
   return "декларацій";
-}
-
-function GaugeRing({ score, color }) {
-  const r = 22;
-  const c = 2 * Math.PI * r;
-  const off = c * (1 - Math.min(100, Math.max(0, Number(score) || 0)) / 100);
-  const [display, setDisplay] = useState(0);
-
-  useEffect(() => {
-    const target = Math.round(Number(score) || 0);
-    const t0 = performance.now();
-    let frame;
-    const tick = (now) => {
-      const t = Math.min((now - t0) / 1400, 1);
-      const e = 1 - (1 - t) ** 3;
-      setDisplay(Math.round(e * target));
-      if (t < 1) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [score]);
-
-  return (
-    <div className="dossier-gauge" style={{ "--risk-color": color }}>
-      <svg width="64" height="64" viewBox="0 0 52 52" aria-hidden>
-        <circle className="dossier-gauge-track" cx="26" cy="26" r={r} fill="none" strokeWidth="4" />
-        <circle
-          className="dossier-gauge-arc"
-          cx="26"
-          cy="26"
-          r={r}
-          fill="none"
-          strokeWidth="4"
-          strokeDasharray={c}
-          strokeDashoffset={off}
-        />
-      </svg>
-      <div className="dossier-gauge-score">{display}</div>
-    </div>
-  );
 }
 
 function NowCard({
@@ -265,7 +226,7 @@ function NowCard({
     return (
       <div className="dossier-now-card dossier-now-card--done" style={{ "--risk-color": color }}>
         <div className="dossier-nc-left">
-          <GaugeRing score={score} color={color} />
+          <RiskGauge score={score} color={color} size={64} duration={1400} className="dossier-gauge" />
         </div>
         <div className="dossier-nc-main">
           <div className="dossier-nc-name">{name}</div>
