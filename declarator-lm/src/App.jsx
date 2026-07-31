@@ -116,6 +116,14 @@ function pickRandomHeaderTagline() {
   return HEADER_TAGLINES[Math.floor(Math.random() * HEADER_TAGLINES.length)];
 }
 
+/** Sanitizes a numeric field's raw input: empty/NaN falls back, everything else is floored and clamped to [min, max]. */
+function sanitizeInt(raw, { fallback, min = -Infinity, max = Infinity }) {
+  if (String(raw).trim() === "") return fallback;
+  const v = Math.floor(Number(raw));
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+}
+
 /** Short model name for the header (no provider, no vendor prefix before "/"). */
 function formatCloudHeaderModelShort(model) {
   const m = String(model || "").trim();
@@ -687,7 +695,9 @@ function TooltipWrap({ tip, children, className = "" }) {
 }
 
 function AdvancedRequestSettingsModal({
-  onClose,
+  onDismiss,
+  onConfirm,
+  hasRetryTarget,
   timeout,
   setTimeout_,
   retries,
@@ -701,14 +711,14 @@ function AdvancedRequestSettingsModal({
 }) {
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onDismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onDismiss]);
 
   return (
-    <div className="cloud-modal-overlay" role="presentation" onClick={onClose}>
+    <div className="cloud-modal-overlay" role="presentation" onClick={onDismiss}>
       <div
         className="cloud-modal adv-settings-modal"
         role="dialog"
@@ -724,32 +734,35 @@ function AdvancedRequestSettingsModal({
             <div className="adv-settings-form-row adv-settings-form-row--triple">
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Таймаут (сек)" tip={SIDEBAR_TOOLTIPS.timeout} />
-                <input className="field-input" type="number" value={timeout} onChange={(e) => setTimeout_(Number(e.target.value))} />
+                <input className="field-input" type="number" value={timeout} onChange={(e) => setTimeout_(sanitizeInt(e.target.value, { fallback: 600, min: 1 }))} />
               </div>
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Повторів" tip={SIDEBAR_TOOLTIPS.retries} />
-                <input className="field-input" type="number" value={retries} onChange={(e) => setRetries(Number(e.target.value))} />
+                <input className="field-input" type="number" value={retries} onChange={(e) => setRetries(sanitizeInt(e.target.value, { fallback: 2, min: 0 }))} />
               </div>
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Пауза між повт." tip={SIDEBAR_TOOLTIPS.retryDelay} />
-                <input className="field-input" type="number" value={retryDelay} onChange={(e) => setRetryDelay(Number(e.target.value))} />
+                <input className="field-input" type="number" value={retryDelay} onChange={(e) => setRetryDelay(sanitizeInt(e.target.value, { fallback: 5, min: 0 }))} />
               </div>
             </div>
             <div className="adv-settings-form-row adv-settings-form-row--double">
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Макс. розмір запиту" tip={SIDEBAR_TOOLTIPS.maxChars} />
-                <input className="field-input" type="number" value={maxChars} onChange={(e) => setMaxChars(Number(e.target.value))} />
+                <input className="field-input" type="number" value={maxChars} onChange={(e) => setMaxChars(sanitizeInt(e.target.value, { fallback: 64000, min: 1 }))} />
               </div>
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Макс. обсяг відповіді" tip={SIDEBAR_TOOLTIPS.numPredict} />
-                <input className="field-input" type="number" value={numPredict} onChange={(e) => setNumPredict(Number(e.target.value))} />
+                <input className="field-input" type="number" value={numPredict} onChange={(e) => setNumPredict(sanitizeInt(e.target.value, { fallback: 16000 }))} />
               </div>
             </div>
           </div>
         </div>
         <div className="cloud-modal-actions">
-          <button type="button" className="btn-primary" onClick={onClose}>
-            Готово
+          <button type="button" className="btn-secondary" onClick={onDismiss}>
+            Скасувати
+          </button>
+          <button type="button" className="btn-primary" onClick={onConfirm}>
+            {hasRetryTarget ? "Застосувати й повторити" : "Готово"}
           </button>
         </div>
       </div>
@@ -1124,6 +1137,7 @@ function CloudSettingsModal({
   onRefreshOpenrouterCredits,
   onReloadOllamaModels,
   onReloadOpenrouterModels,
+  modelListError = "",
   pipelineMaxConcurrent = 1,
   onPipelineMaxConcurrentChange,
 }) {
@@ -1495,7 +1509,7 @@ function CloudSettingsModal({
               </div>
             </div>
           ) : null}
-          {error && <div className="cloud-error">{error}</div>}
+          {(error || modelListError) && <div className="cloud-error">{error || modelListError}</div>}
         </div>
         <div className="cloud-modal-footer-bar">
           <div className="cloud-modal-footer-buttons-row">
@@ -4053,6 +4067,7 @@ export default function App() {
   const [dossierMainView, setDossierMainView] = useState("dossier");
   const dossierRefreshTimerRef = useRef(null);
   const [usageStatsError, setUsageStatsError] = useState("");
+  const [modelListError, setModelListError] = useState("");
   const usageStatsReqRef = useRef(0);
   const [ready, setReady] = useState(false);
   /** One random slogan per session (next app launch picks a new one). */
@@ -4060,6 +4075,8 @@ export default function App() {
   const normalPathsSnapshotRef = useRef(null);
   const runStartedAtRef = useRef(null);
   const runTimerHideRef = useRef(null);
+  /** Synchronous guard against double-clicking Start before isRunning re-renders (validate() is awaited first). */
+  const startInFlightRef = useRef(false);
   const autosaveTimerRef = useRef(null);
   const lastAutosavedPayloadRef = useRef("");
   const autosaveFlashTimerRef = useRef(null);
@@ -4289,7 +4306,12 @@ export default function App() {
     setRequestSettingsModalOpen(true);
   }, []);
 
-  const closeRequestSettingsModal = useCallback(() => {
+  const dismissRequestSettingsModal = useCallback(() => {
+    setRequestSettingsModalOpen(false);
+    setErrorActionTargetFile(null);
+  }, []);
+
+  const confirmRequestSettingsModal = useCallback(() => {
     const target = errorActionTargetFile;
     setRequestSettingsModalOpen(false);
     setErrorActionTargetFile(null);
@@ -4479,16 +4501,20 @@ export default function App() {
 
   const loadModels = useCallback(async (hostUrl) => {
     if (!api()) return;
+    setModelListError("");
     try {
       const list = await api().fetch_models(hostUrl || "http://127.0.0.1:11434");
       if (Array.isArray(list) && list.length > 0) {
         setModels(sortModelsAZ(list));
       }
-    } catch (_) {}
+    } catch (e) {
+      setModelListError(`Не вдалося оновити список моделей Ollama: ${e}`);
+    }
   }, []);
 
   const loadCloudModels = useCallback(async (hostUrl, apiKey) => {
     if (!api()) return;
+    setModelListError("");
     try {
       const list = await api().fetch_models(
         hostUrl || "https://ollama.com",
@@ -4497,12 +4523,15 @@ export default function App() {
       if (Array.isArray(list) && list.length > 0) {
         setCloudModels(sortModelsAZ(list));
       }
-    } catch (_) {}
+    } catch (e) {
+      setModelListError(`Не вдалося оновити список cloud-моделей: ${e}`);
+    }
   }, []);
 
   // Alternate path: load the model list from OpenRouter /models.
   const loadOpenrouterModels = useCallback(async (hostUrl, apiKey) => {
     if (!api()) return;
+    setModelListError("");
     try {
       const bridge = api();
       const host = hostUrl || "https://openrouter.ai/api/v1";
@@ -4531,7 +4560,9 @@ export default function App() {
         setOpenrouterModelPricing({});
         setOpenrouterPricingPerToken({});
       }
-    } catch (_) {}
+    } catch (e) {
+      setModelListError(`Не вдалося оновити список OpenRouter-моделей: ${e}`);
+    }
   }, []);
 
   const refreshOpenrouterCredits = useCallback(async (hostUrl, apiKey) => {
@@ -5617,7 +5648,8 @@ export default function App() {
   };
 
   const handleStart = async () => {
-    if (isRunning || !api()) return;
+    if (isRunning || !api() || startInFlightRef.current) return;
+    startInFlightRef.current = true;
     setReportBtnPulse("idle");
     primePipelineAudioContext();
     resetLogSession();
@@ -5630,12 +5662,14 @@ export default function App() {
         for (const err of check.errors) appendLog(`[ПОМИЛКА] ${err}\n`);
         setStatusText("Помилка");
         setTaskText("Перевірте налаштування перед запуском");
+        startInFlightRef.current = false;
         return;
       }
     } catch (e) {
       appendLog(`[ПОМИЛКА] Валідація: ${e}\n`);
       setStatusText("Помилка");
       setTaskText(String(e));
+      startInFlightRef.current = false;
       return;
     }
     setIsRunning(true);
@@ -5697,6 +5731,7 @@ export default function App() {
       setElapsedSec(finalSec);
       appendLog(`[INFO] Тривалість пайплайну: ${finalSec} с (${formatDurationClock(finalSec)})\n`);
       setIsRunning(false);
+      startInFlightRef.current = false;
       setTimeout(() => setProgress({ cur: 0, total: 0 }), 2500);
       setRunTimerExiting(true);
       runTimerHideRef.current = setTimeout(() => {
@@ -6271,7 +6306,7 @@ export default function App() {
                     className={`field-input field-input--short field-input--queue-count${fileQueueMode === "pick" ? " field-input--muted" : ""}`}
                     type="number"
                     value={maxFiles}
-                    onChange={(e) => setMaxFiles(Number(e.target.value))}
+                    onChange={(e) => setMaxFiles(sanitizeInt(e.target.value, { fallback: 1, min: 0 }))}
                     disabled={fileQueueMode === "pick"}
                   />
                 </div>
@@ -6343,6 +6378,9 @@ export default function App() {
                     </TooltipWrap>
                   </div>
                 </div>
+                {modelListError && !cloudMode ? (
+                  <div className="cloud-error">{modelListError}</div>
+                ) : null}
 
                 <div className="field-row">
                   <LabelWithTooltip as="label" className="field-label" text="Хост Ollama" tip={SIDEBAR_TOOLTIPS.host} />
@@ -7012,6 +7050,7 @@ export default function App() {
             const r = cloudDraft.openrouter || {};
             loadOpenrouterModels(r.host, r.api_key);
           }}
+          modelListError={modelListError}
           pipelineMaxConcurrent={pipelineMaxConcurrent}
           onPipelineMaxConcurrentChange={setPipelineMaxConcurrent}
           onOpenComparison={({ provider, host, api_key }) => {
@@ -7257,7 +7296,9 @@ export default function App() {
       </AnimatedModalPresence>
       <AnimatedModalPresence when={requestSettingsModalOpen}>
         <AdvancedRequestSettingsModal
-          onClose={closeRequestSettingsModal}
+          onDismiss={dismissRequestSettingsModal}
+          onConfirm={confirmRequestSettingsModal}
+          hasRetryTarget={Boolean(errorActionTargetFile)}
           timeout={timeout}
           setTimeout_={setTimeout_}
           retries={retries}

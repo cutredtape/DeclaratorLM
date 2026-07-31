@@ -202,6 +202,7 @@ export const enCatalog = {
   "Запустити аналіз": "Start analysis",
   "Запустіть аналіз, щоб накопичити дані.": "Run analysis to accumulate data.",
   "Застосувати до сесії": "Apply to session",
+  "Застосувати й повторити": "Apply and retry",
   "Зберегти і увімкнути": "Save and enable",
   "Збереження": "Saving",
   "Збережено": "Saved",
