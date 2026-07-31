@@ -4437,14 +4437,14 @@ export default function App() {
       if (totalEv) {
         const total = Number(totalEv[1]);
         setProgress({ cur: 0, total });
-        setTaskText(`Обробка декларацій: 0 / ${total}`);
+        setTaskText("Обробка декларацій…");
         return;
       }
       const foundEv = PIPELINE_FOUND_RE.exec(trimmed);
       if (foundEv) {
         const total = Number(foundEv[1]);
         setProgress((prev) => ({ cur: prev.cur || 0, total }));
-        setTaskText(`Обробка декларацій: 0 / ${total}`);
+        setTaskText("Обробка декларацій…");
         return;
       }
       const m = PROGRESS_RE.exec(trimmed);
@@ -4455,7 +4455,7 @@ export default function App() {
         setProgress({ cur: curN, total: totalN });
         setPendingThink("");
         const icon = status === "OK" ? "\u2713" : status === "LIMIT_EXCEEDED" ? "\u26a0" : "\u2717";
-        setTaskText(`Обробка: ${curN} / ${totalN} ${icon}`);
+        setTaskText(`Обробка декларацій ${icon}`);
       }
     };
     return () => { delete window._onLogLine; };
@@ -6767,9 +6767,6 @@ export default function App() {
             )}
             <footer className="status-bar">
               <div className="status-task">{taskText || "Очікує запуску"}</div>
-              <div className="status-meta">
-                {progress.total > 0 && `${progress.cur}/${progress.total} файлів`}
-              </div>
             </footer>
           </div>
         </aside>

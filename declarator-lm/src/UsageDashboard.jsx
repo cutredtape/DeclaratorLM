@@ -395,7 +395,7 @@ export default function UsageDashboard({ stats, loading, error }) {
     return (
       <div className="usage-dash">
         <div className="usage-dash-head">Зведення за весь час</div>
-        <div className="usage-dash-sub">Не вдалось завантажити статистику.</div>
+        <div className="usage-dash-sub usage-dash-sub--err">Не вдалось завантажити статистику.</div>
       </div>
     );
   }
