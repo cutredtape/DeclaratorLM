@@ -1,0 +1,5 @@
+# DeclaratorLM benchmark TUI — install separately from the project root deps.
+# Usage:  python -m pip install -r benchmark/requirements.txt
+# Prefer the project venv:  venv\Scripts\python.exe -m pip install -r benchmark/requirements.txt
+
+rich>=13,<15

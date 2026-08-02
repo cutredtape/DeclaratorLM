@@ -116,6 +116,14 @@ function pickRandomHeaderTagline() {
   return HEADER_TAGLINES[Math.floor(Math.random() * HEADER_TAGLINES.length)];
 }
 
+/** Sanitizes a numeric field's raw input: empty/NaN falls back, everything else is floored and clamped to [min, max]. */
+function sanitizeInt(raw, { fallback, min = -Infinity, max = Infinity }) {
+  if (String(raw).trim() === "") return fallback;
+  const v = Math.floor(Number(raw));
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+}
+
 /** Short model name for the header (no provider, no vendor prefix before "/"). */
 function formatCloudHeaderModelShort(model) {
   const m = String(model || "").trim();
@@ -687,7 +695,9 @@ function TooltipWrap({ tip, children, className = "" }) {
 }
 
 function AdvancedRequestSettingsModal({
-  onClose,
+  onDismiss,
+  onConfirm,
+  hasRetryTarget,
   timeout,
   setTimeout_,
   retries,
@@ -701,14 +711,14 @@ function AdvancedRequestSettingsModal({
 }) {
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onDismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onDismiss]);
 
   return (
-    <div className="cloud-modal-overlay" role="presentation" onClick={onClose}>
+    <div className="cloud-modal-overlay" role="presentation" onClick={onDismiss}>
       <div
         className="cloud-modal adv-settings-modal"
         role="dialog"
@@ -724,32 +734,35 @@ function AdvancedRequestSettingsModal({
             <div className="adv-settings-form-row adv-settings-form-row--triple">
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Таймаут (сек)" tip={SIDEBAR_TOOLTIPS.timeout} />
-                <input className="field-input" type="number" value={timeout} onChange={(e) => setTimeout_(Number(e.target.value))} />
+                <input className="field-input" type="number" value={timeout} onChange={(e) => setTimeout_(sanitizeInt(e.target.value, { fallback: 600, min: 1 }))} />
               </div>
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Повторів" tip={SIDEBAR_TOOLTIPS.retries} />
-                <input className="field-input" type="number" value={retries} onChange={(e) => setRetries(Number(e.target.value))} />
+                <input className="field-input" type="number" value={retries} onChange={(e) => setRetries(sanitizeInt(e.target.value, { fallback: 2, min: 0 }))} />
               </div>
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Пауза між повт." tip={SIDEBAR_TOOLTIPS.retryDelay} />
-                <input className="field-input" type="number" value={retryDelay} onChange={(e) => setRetryDelay(Number(e.target.value))} />
+                <input className="field-input" type="number" value={retryDelay} onChange={(e) => setRetryDelay(sanitizeInt(e.target.value, { fallback: 5, min: 0 }))} />
               </div>
             </div>
             <div className="adv-settings-form-row adv-settings-form-row--double">
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Макс. розмір запиту" tip={SIDEBAR_TOOLTIPS.maxChars} />
-                <input className="field-input" type="number" value={maxChars} onChange={(e) => setMaxChars(Number(e.target.value))} />
+                <input className="field-input" type="number" value={maxChars} onChange={(e) => setMaxChars(sanitizeInt(e.target.value, { fallback: 64000, min: 1 }))} />
               </div>
               <div className="adv-settings-field-cell">
                 <LabelWithTooltip as="label" className="cloud-label" text="Макс. обсяг відповіді" tip={SIDEBAR_TOOLTIPS.numPredict} />
-                <input className="field-input" type="number" value={numPredict} onChange={(e) => setNumPredict(Number(e.target.value))} />
+                <input className="field-input" type="number" value={numPredict} onChange={(e) => setNumPredict(sanitizeInt(e.target.value, { fallback: 16000 }))} />
               </div>
             </div>
           </div>
         </div>
         <div className="cloud-modal-actions">
-          <button type="button" className="btn-primary" onClick={onClose}>
-            Готово
+          <button type="button" className="btn-secondary" onClick={onDismiss}>
+            Скасувати
+          </button>
+          <button type="button" className="btn-primary" onClick={onConfirm}>
+            {hasRetryTarget ? "Застосувати й повторити" : "Готово"}
           </button>
         </div>
       </div>
@@ -1008,10 +1021,10 @@ function FilePathInput({ label, tooltip, value, onChange, onBrowse, disabled = f
   );
 }
 
-function Toggle({ label, tooltip, checked, onChange, disabled = false, compact = false }) {
+export function Toggle({ label, tooltip, checked, onChange, disabled = false, compact = false, className = "" }) {
   return (
     <label
-      className={`toggle-row${disabled ? " toggle-row--disabled" : ""}${compact ? " toggle-row--compact" : ""}`}
+      className={`toggle-row${disabled ? " toggle-row--disabled" : ""}${compact ? " toggle-row--compact" : ""}${className ? ` ${className}` : ""}`}
       aria-disabled={disabled}
     >
       <span
@@ -1124,6 +1137,7 @@ function CloudSettingsModal({
   onRefreshOpenrouterCredits,
   onReloadOllamaModels,
   onReloadOpenrouterModels,
+  modelListError = "",
   pipelineMaxConcurrent = 1,
   onPipelineMaxConcurrentChange,
 }) {
@@ -1495,7 +1509,7 @@ function CloudSettingsModal({
               </div>
             </div>
           ) : null}
-          {error && <div className="cloud-error">{error}</div>}
+          {(error || modelListError) && <div className="cloud-error">{error || modelListError}</div>}
         </div>
         <div className="cloud-modal-footer-bar">
           <div className="cloud-modal-footer-buttons-row">
@@ -2571,7 +2585,7 @@ function CloudComparisonModal({
               </svg>
             </button>
           </TooltipWrap>
-          <button type="button" className="btn-secondary" onClick={onCancel}>Закрити</button>
+          <button type="button" className="btn-secondary" onClick={onCancel}>Скасувати</button>
           <button type="button" className="btn-primary" onClick={handleConfirm} disabled={!canConfirm}>
             OK
           </button>
@@ -3085,6 +3099,101 @@ function ParseDeclarationModal({
   );
 }
 
+function PromptVersionBar({
+  tabKey,
+  versions,
+  activeVersion,
+  nameInput,
+  onNameInputChange,
+  nameError,
+  onSelect,
+  onSave,
+  onRename,
+  onDelete,
+}) {
+  const savedNames = Object.keys(versions).sort((a, b) => a.localeCompare(b));
+  const isNamed = activeVersion !== "core" && activeVersion !== "__custom__";
+  return (
+    <div className="prompt-version-block">
+      <label className="cloud-label" htmlFor={`prompt-version-select-${tabKey}`}>
+        Версія промпту
+      </label>
+      <div className="prompt-version-row">
+        <select
+          id={`prompt-version-select-${tabKey}`}
+          className="field-input prompt-version-select"
+          value={activeVersion}
+          onChange={(e) => onSelect(tabKey, e.target.value)}
+        >
+          <option value="core">core (вбудований)</option>
+          {activeVersion === "__custom__" && (
+            <option value="__custom__" disabled>
+              — незбережені зміни —
+            </option>
+          )}
+          {savedNames.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          className="field-input prompt-version-name-input"
+          placeholder="назва версії"
+          value={nameInput}
+          onChange={(e) => onNameInputChange(e.target.value)}
+        />
+        <div className="prompt-version-actions">
+          <TooltipWrap tip="Зберегти поточний текст під цією назвою">
+            <button
+              type="button"
+              className="btn-browse prompt-version-icon-btn"
+              onClick={() => onSave(tabKey)}
+              aria-label="Зберегти версію промпту"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+          </TooltipWrap>
+          <TooltipWrap tip={isNamed ? "Перейменувати цю версію" : "Оберіть збережену версію, щоб перейменувати"}>
+            <button
+              type="button"
+              className="btn-browse prompt-version-icon-btn"
+              onClick={() => onRename(tabKey)}
+              disabled={!isNamed}
+              aria-label="Перейменувати версію промпту"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z" />
+              </svg>
+            </button>
+          </TooltipWrap>
+          <TooltipWrap tip={isNamed ? "Видалити цю версію" : "Оберіть збережену версію, щоб видалити"}>
+            <button
+              type="button"
+              className="btn-browse prompt-version-icon-btn prompt-version-icon-btn--danger"
+              onClick={() => onDelete(tabKey)}
+              disabled={!isNamed}
+              aria-label="Видалити версію промпту"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          </TooltipWrap>
+        </div>
+      </div>
+      {nameError && <p className="cloud-error prompt-version-error">{nameError}</p>}
+    </div>
+  );
+}
+
 function PromptSessionModal({
   tab,
   onTab,
@@ -3094,6 +3203,15 @@ function PromptSessionModal({
   onClose,
   onApply,
   onResetBuiltin,
+  versions,
+  draftVersion,
+  onSelectVersion,
+  nameInput,
+  onNameInputChange,
+  nameError,
+  onSaveVersion,
+  onRenameVersion,
+  onDeleteVersion,
 }) {
   return (
     <div className="cloud-modal-overlay">
@@ -3127,6 +3245,20 @@ function PromptSessionModal({
             Досьє (HTML-звіт)
           </button>
         </div>
+        {!loadingBuiltin && (
+          <PromptVersionBar
+            tabKey={tab}
+            versions={versions[tab]}
+            activeVersion={draftVersion[tab]}
+            nameInput={nameInput}
+            onNameInputChange={onNameInputChange}
+            nameError={nameError}
+            onSelect={onSelectVersion}
+            onSave={onSaveVersion}
+            onRename={onRenameVersion}
+            onDelete={onDeleteVersion}
+          />
+        )}
         <div className="cloud-modal-body prompt-editor-body">
           {loadingBuiltin && (
             <div className="deep-research-loading deep-research-loading--inline">
@@ -4014,6 +4146,16 @@ export default function App() {
     dossierUser: "",
   });
   const [promptBuiltinLoading, setPromptBuiltinLoading] = useState(false);
+  /** Cached built-in prompt texts (fetched once; "core" always resolves to this) */
+  const [promptBuiltin, setPromptBuiltin] = useState(null);
+  /** Named prompt versions saved on this session: { pipeline: {name: {system,user}}, dossier: {...} } */
+  const [promptVersions, setPromptVersions] = useState({ pipeline: {}, dossier: {} });
+  /** Which version is currently loaded into promptDraft, per tab: "core" | "__custom__" | a saved name */
+  const [promptDraftVersion, setPromptDraftVersion] = useState({ pipeline: "core", dossier: "core" });
+  const [promptNameInput, setPromptNameInput] = useState("");
+  const [promptNameError, setPromptNameError] = useState("");
+  /** Name of the version actually applied to the running session (drives the header badge + run args) */
+  const [sessionPromptNames, setSessionPromptNames] = useState({ pipeline: "core", dossier: "core" });
 
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -4053,6 +4195,7 @@ export default function App() {
   const [dossierMainView, setDossierMainView] = useState("dossier");
   const dossierRefreshTimerRef = useRef(null);
   const [usageStatsError, setUsageStatsError] = useState("");
+  const [modelListError, setModelListError] = useState("");
   const usageStatsReqRef = useRef(0);
   const [ready, setReady] = useState(false);
   /** One random slogan per session (next app launch picks a new one). */
@@ -4060,6 +4203,8 @@ export default function App() {
   const normalPathsSnapshotRef = useRef(null);
   const runStartedAtRef = useRef(null);
   const runTimerHideRef = useRef(null);
+  /** Synchronous guard against double-clicking Start before isRunning re-renders (validate() is awaited first). */
+  const startInFlightRef = useRef(false);
   const autosaveTimerRef = useRef(null);
   const lastAutosavedPayloadRef = useRef("");
   const autosaveFlashTimerRef = useRef(null);
@@ -4289,7 +4434,12 @@ export default function App() {
     setRequestSettingsModalOpen(true);
   }, []);
 
-  const closeRequestSettingsModal = useCallback(() => {
+  const dismissRequestSettingsModal = useCallback(() => {
+    setRequestSettingsModalOpen(false);
+    setErrorActionTargetFile(null);
+  }, []);
+
+  const confirmRequestSettingsModal = useCallback(() => {
     const target = errorActionTargetFile;
     setRequestSettingsModalOpen(false);
     setErrorActionTargetFile(null);
@@ -4437,14 +4587,14 @@ export default function App() {
       if (totalEv) {
         const total = Number(totalEv[1]);
         setProgress({ cur: 0, total });
-        setTaskText(`Обробка декларацій: 0 / ${total}`);
+        setTaskText("Обробка декларацій…");
         return;
       }
       const foundEv = PIPELINE_FOUND_RE.exec(trimmed);
       if (foundEv) {
         const total = Number(foundEv[1]);
         setProgress((prev) => ({ cur: prev.cur || 0, total }));
-        setTaskText(`Обробка декларацій: 0 / ${total}`);
+        setTaskText("Обробка декларацій…");
         return;
       }
       const m = PROGRESS_RE.exec(trimmed);
@@ -4455,7 +4605,7 @@ export default function App() {
         setProgress({ cur: curN, total: totalN });
         setPendingThink("");
         const icon = status === "OK" ? "\u2713" : status === "LIMIT_EXCEEDED" ? "\u26a0" : "\u2717";
-        setTaskText(`Обробка: ${curN} / ${totalN} ${icon}`);
+        setTaskText(`Обробка декларацій ${icon}`);
       }
     };
     return () => { delete window._onLogLine; };
@@ -4479,16 +4629,20 @@ export default function App() {
 
   const loadModels = useCallback(async (hostUrl) => {
     if (!api()) return;
+    setModelListError("");
     try {
       const list = await api().fetch_models(hostUrl || "http://127.0.0.1:11434");
       if (Array.isArray(list) && list.length > 0) {
         setModels(sortModelsAZ(list));
       }
-    } catch (_) {}
+    } catch (e) {
+      setModelListError(`Не вдалося оновити список моделей Ollama: ${e}`);
+    }
   }, []);
 
   const loadCloudModels = useCallback(async (hostUrl, apiKey) => {
     if (!api()) return;
+    setModelListError("");
     try {
       const list = await api().fetch_models(
         hostUrl || "https://ollama.com",
@@ -4497,12 +4651,15 @@ export default function App() {
       if (Array.isArray(list) && list.length > 0) {
         setCloudModels(sortModelsAZ(list));
       }
-    } catch (_) {}
+    } catch (e) {
+      setModelListError(`Не вдалося оновити список cloud-моделей: ${e}`);
+    }
   }, []);
 
   // Alternate path: load the model list from OpenRouter /models.
   const loadOpenrouterModels = useCallback(async (hostUrl, apiKey) => {
     if (!api()) return;
+    setModelListError("");
     try {
       const bridge = api();
       const host = hostUrl || "https://openrouter.ai/api/v1";
@@ -4531,7 +4688,9 @@ export default function App() {
         setOpenrouterModelPricing({});
         setOpenrouterPricingPerToken({});
       }
-    } catch (_) {}
+    } catch (e) {
+      setModelListError(`Не вдалося оновити список OpenRouter-моделей: ${e}`);
+    }
   }, []);
 
   const refreshOpenrouterCredits = useCallback(async (hostUrl, apiKey) => {
@@ -5097,10 +5256,42 @@ export default function App() {
     }
   };
 
+  /** Maps a session-applied name ("core" | "custom" | a saved name) to a draft-selector value. */
+  const sessionNameToDraftVersion = (tabKey, name) => {
+    if (name === "core") return "core";
+    if (name === "custom") return "__custom__";
+    return promptVersions[tabKey][name] ? name : "__custom__";
+  };
+
+  const fetchBuiltinPrompts = async () => {
+    const raw = await api().get_builtin_prompts();
+    const d = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return {
+      pipelineSystem: d.pipeline_system_prompt || "",
+      pipelineUser: d.pipeline_user_prompt_template || "",
+      dossierSystem: d.dossier_system_prompt || "",
+      dossierUser: d.dossier_user_prompt_template || "",
+    };
+  };
+
   const openPromptEditor = async () => {
     if (!api()) return;
     setPromptEditorOpen(true);
     setPromptEditorTab("pipeline");
+    setPromptNameError("");
+    let builtin = promptBuiltin;
+    if (!builtin) {
+      setPromptBuiltinLoading(true);
+      try {
+        builtin = await fetchBuiltinPrompts();
+        setPromptBuiltin(builtin);
+      } catch {
+        builtin = { pipelineSystem: "", pipelineUser: "", dossierSystem: "", dossierUser: "" };
+        setPromptBuiltin(builtin);
+      } finally {
+        setPromptBuiltinLoading(false);
+      }
+    }
     if (sessionPromptOverrides) {
       setPromptDraft({
         pipelineSystem: sessionPromptOverrides.pipelineSystem,
@@ -5108,29 +5299,121 @@ export default function App() {
         dossierSystem: sessionPromptOverrides.dossierSystem,
         dossierUser: sessionPromptOverrides.dossierUser,
       });
-      setPromptBuiltinLoading(false);
+      const dv = {
+        pipeline: sessionNameToDraftVersion("pipeline", sessionPromptNames.pipeline),
+        dossier: sessionNameToDraftVersion("dossier", sessionPromptNames.dossier),
+      };
+      setPromptDraftVersion(dv);
+      setPromptNameInput(dv.pipeline !== "core" && dv.pipeline !== "__custom__" ? dv.pipeline : "");
+    } else {
+      setPromptDraft(builtin);
+      setPromptDraftVersion({ pipeline: "core", dossier: "core" });
+      setPromptNameInput("");
+    }
+  };
+
+  /** Any manual edit invalidates the "this is version X" label until re-saved or re-selected. */
+  const onPromptDraftField = (field, value) => {
+    setPromptDraft((prev) => ({ ...prev, [field]: value }));
+    const tabKey = field.startsWith("pipeline") ? "pipeline" : "dossier";
+    setPromptDraftVersion((prev) =>
+      prev[tabKey] === "__custom__" ? prev : { ...prev, [tabKey]: "__custom__" }
+    );
+  };
+
+  const onSelectPromptVersion = (tabKey, name) => {
+    if (name === "__custom__") return;
+    let system, user;
+    if (name === "core") {
+      if (!promptBuiltin) return;
+      system = promptBuiltin[`${tabKey}System`];
+      user = promptBuiltin[`${tabKey}User`];
+    } else {
+      const v = promptVersions[tabKey][name];
+      if (!v) return;
+      system = v.system;
+      user = v.user;
+    }
+    setPromptDraft((prev) => ({ ...prev, [`${tabKey}System`]: system, [`${tabKey}User`]: user }));
+    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: name }));
+    setPromptNameInput(name === "core" ? "" : name);
+    setPromptNameError("");
+  };
+
+  const savePromptVersion = (tabKey) => {
+    const name = promptNameInput.trim();
+    if (!name) {
+      setPromptNameError("Вкажіть назву версії.");
       return;
     }
-    setPromptBuiltinLoading(true);
-    try {
-      const raw = await api().get_builtin_prompts();
-      const d = typeof raw === "string" ? JSON.parse(raw) : raw;
-      setPromptDraft({
-        pipelineSystem: d.pipeline_system_prompt || "",
-        pipelineUser: d.pipeline_user_prompt_template || "",
-        dossierSystem: d.dossier_system_prompt || "",
-        dossierUser: d.dossier_user_prompt_template || "",
-      });
-    } catch {
-      setPromptDraft({
-        pipelineSystem: "",
-        pipelineUser: "",
-        dossierSystem: "",
-        dossierUser: "",
-      });
-    } finally {
-      setPromptBuiltinLoading(false);
+    if (name.toLowerCase() === "core") {
+      setPromptNameError("Назва «core» зарезервована для вбудованого промпту.");
+      return;
     }
+    const system = promptDraft[`${tabKey}System`];
+    const user = promptDraft[`${tabKey}User`];
+    setPromptVersions((prev) => ({
+      ...prev,
+      [tabKey]: { ...prev[tabKey], [name]: { system, user } },
+    }));
+    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: name }));
+    setPromptNameError("");
+    setTaskText(`Версію промпту «${name}» збережено на сесію.`);
+  };
+
+  const renamePromptVersion = (tabKey) => {
+    const oldName = promptDraftVersion[tabKey];
+    if (oldName === "core" || oldName === "__custom__") return;
+    const newName = promptNameInput.trim();
+    if (!newName) {
+      setPromptNameError("Вкажіть нову назву.");
+      return;
+    }
+    if (newName.toLowerCase() === "core") {
+      setPromptNameError("Назва «core» зарезервована для вбудованого промпту.");
+      return;
+    }
+    if (newName !== oldName && promptVersions[tabKey][newName]) {
+      setPromptNameError(`Версія з назвою «${newName}» вже існує.`);
+      return;
+    }
+    setPromptVersions((prev) => {
+      const versions = { ...prev[tabKey] };
+      const content = versions[oldName];
+      delete versions[oldName];
+      versions[newName] = content;
+      return { ...prev, [tabKey]: versions };
+    });
+    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: newName }));
+    // Keep the header/run-args label in sync if the renamed version is the one live this session.
+    setSessionPromptNames((prev) =>
+      prev[tabKey] === oldName ? { ...prev, [tabKey]: newName } : prev
+    );
+    setPromptNameError("");
+    setTaskText(`Версію промпту перейменовано на «${newName}».`);
+  };
+
+  const deletePromptVersion = (tabKey) => {
+    const name = promptDraftVersion[tabKey];
+    if (name === "core" || name === "__custom__") return;
+    setPromptVersions((prev) => {
+      const versions = { ...prev[tabKey] };
+      delete versions[name];
+      return { ...prev, [tabKey]: versions };
+    });
+    if (promptBuiltin) {
+      setPromptDraft((prev) => ({
+        ...prev,
+        [`${tabKey}System`]: promptBuiltin[`${tabKey}System`],
+        [`${tabKey}User`]: promptBuiltin[`${tabKey}User`],
+      }));
+    }
+    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: "core" }));
+    setPromptNameInput("");
+    setPromptNameError("");
+    // Deleting a catalog entry does not touch an already-applied session override — if this
+    // version is live, it keeps running on its last-applied text under its (now orphaned) name.
+    setTaskText(`Версію промпту «${name}» видалено.`);
   };
 
   const applyPromptSession = () => {
@@ -5148,6 +5431,17 @@ export default function App() {
         dossierUser: du,
       });
     }
+    const resolveName = (tabKey, sys, usr) => {
+      const dv = promptDraftVersion[tabKey];
+      if (dv !== "__custom__") return dv;
+      const b = promptBuiltin;
+      if (b && sys === b[`${tabKey}System`].trim() && usr === b[`${tabKey}User`].trim()) return "core";
+      return "custom";
+    };
+    setSessionPromptNames({
+      pipeline: resolveName("pipeline", ps, pu),
+      dossier: resolveName("dossier", ds, du),
+    });
     setPromptEditorOpen(false);
     setTaskText("Промпти сесії оновлено. Оригінали в репозиторії не змінені.");
   };
@@ -5155,16 +5449,15 @@ export default function App() {
   const resetPromptsToBuiltin = async () => {
     if (!api()) return;
     setSessionPromptOverrides(null);
+    setSessionPromptNames({ pipeline: "core", dossier: "core" });
     setPromptBuiltinLoading(true);
     try {
-      const raw = await api().get_builtin_prompts();
-      const d = typeof raw === "string" ? JSON.parse(raw) : raw;
-      setPromptDraft({
-        pipelineSystem: d.pipeline_system_prompt || "",
-        pipelineUser: d.pipeline_user_prompt_template || "",
-        dossierSystem: d.dossier_system_prompt || "",
-        dossierUser: d.dossier_user_prompt_template || "",
-      });
+      const builtin = await fetchBuiltinPrompts();
+      setPromptBuiltin(builtin);
+      setPromptDraft(builtin);
+      setPromptDraftVersion({ pipeline: "core", dossier: "core" });
+      setPromptNameInput("");
+      setPromptNameError("");
       setTaskText("Тексти у редакторі скинуто до вбудованих; активні перевизначення сесії вимкнено.");
     } finally {
       setPromptBuiltinLoading(false);
@@ -5232,6 +5525,7 @@ export default function App() {
           prompt_session_pipeline_user_template: sessionPromptOverrides.pipelineUser,
           prompt_session_dossier_system: sessionPromptOverrides.dossierSystem,
           prompt_session_dossier_user_template: sessionPromptOverrides.dossierUser,
+          prompt_session_pipeline_name: sessionPromptNames.pipeline,
         }
       : {}),
   });
@@ -5331,6 +5625,7 @@ export default function App() {
     showHeaderTaglines,
     debugUiMode,
     sessionPromptOverrides,
+    sessionPromptNames,
   ]);
 
   useEffect(
@@ -5462,6 +5757,7 @@ export default function App() {
       const n = Number(res?.deleted_count) || 0;
       if (res?.ok !== false || n > 0) {
         setSessionPromptOverrides(null);
+        setSessionPromptNames({ pipeline: "core", dossier: "core" });
         const settingsRaw = await api().load_settings();
         const s = typeof settingsRaw === "string" ? JSON.parse(settingsRaw) : settingsRaw;
         applySettings(s);
@@ -5617,7 +5913,8 @@ export default function App() {
   };
 
   const handleStart = async () => {
-    if (isRunning || !api()) return;
+    if (isRunning || !api() || startInFlightRef.current) return;
+    startInFlightRef.current = true;
     setReportBtnPulse("idle");
     primePipelineAudioContext();
     resetLogSession();
@@ -5630,12 +5927,14 @@ export default function App() {
         for (const err of check.errors) appendLog(`[ПОМИЛКА] ${err}\n`);
         setStatusText("Помилка");
         setTaskText("Перевірте налаштування перед запуском");
+        startInFlightRef.current = false;
         return;
       }
     } catch (e) {
       appendLog(`[ПОМИЛКА] Валідація: ${e}\n`);
       setStatusText("Помилка");
       setTaskText(String(e));
+      startInFlightRef.current = false;
       return;
     }
     setIsRunning(true);
@@ -5697,6 +5996,7 @@ export default function App() {
       setElapsedSec(finalSec);
       appendLog(`[INFO] Тривалість пайплайну: ${finalSec} с (${formatDurationClock(finalSec)})\n`);
       setIsRunning(false);
+      startInFlightRef.current = false;
       setTimeout(() => setProgress({ cur: 0, total: 0 }), 2500);
       setRunTimerExiting(true);
       runTimerHideRef.current = setTimeout(() => {
@@ -6082,6 +6382,12 @@ export default function App() {
               {ready && showHeaderTaglines && headerSlogan ? headerSlogan : APP_UI_VERSION}
               {debugUiMode ? (
                 <>
+                  <span
+                    className="debug-badge debug-badge--prompt"
+                    title="Активна версія промпту пайплайну (DEBUG)"
+                  >
+                    {sessionPromptNames.pipeline}
+                  </span>
                   {cloudComparisonEnabled ? (
                     <span className="debug-badge-compare-wrap">
                       <span className="debug-badge debug-badge--compare">ПОРІВНЯННЯ</span>
@@ -6271,7 +6577,7 @@ export default function App() {
                     className={`field-input field-input--short field-input--queue-count${fileQueueMode === "pick" ? " field-input--muted" : ""}`}
                     type="number"
                     value={maxFiles}
-                    onChange={(e) => setMaxFiles(Number(e.target.value))}
+                    onChange={(e) => setMaxFiles(sanitizeInt(e.target.value, { fallback: 1, min: 0 }))}
                     disabled={fileQueueMode === "pick"}
                   />
                 </div>
@@ -6343,6 +6649,9 @@ export default function App() {
                     </TooltipWrap>
                   </div>
                 </div>
+                {modelListError && !cloudMode ? (
+                  <div className="cloud-error">{modelListError}</div>
+                ) : null}
 
                 <div className="field-row">
                   <LabelWithTooltip as="label" className="field-label" text="Хост Ollama" tip={SIDEBAR_TOOLTIPS.host} />
@@ -6557,7 +6866,7 @@ export default function App() {
                       Редагувати промпт
                     </button>
                     {sessionPromptOverrides ? (
-                      <span className="prompt-session-badge">активні підміни сесії</span>
+                      <span className="prompt-session-badge">{sessionPromptNames.pipeline}</span>
                     ) : null}
                   </div>
 
@@ -6767,9 +7076,6 @@ export default function App() {
             )}
             <footer className="status-bar">
               <div className="status-task">{taskText || "Очікує запуску"}</div>
-              <div className="status-meta">
-                {progress.total > 0 && `${progress.cur}/${progress.total} файлів`}
-              </div>
             </footer>
           </div>
         </aside>
@@ -7015,6 +7321,7 @@ export default function App() {
             const r = cloudDraft.openrouter || {};
             loadOpenrouterModels(r.host, r.api_key);
           }}
+          modelListError={modelListError}
           pipelineMaxConcurrent={pipelineMaxConcurrent}
           onPipelineMaxConcurrentChange={setPipelineMaxConcurrent}
           onOpenComparison={({ provider, host, api_key }) => {
@@ -7188,13 +7495,23 @@ export default function App() {
           tab={promptEditorTab}
           onTab={setPromptEditorTab}
           draft={promptDraft}
-          onDraftField={(field, value) =>
-            setPromptDraft((prev) => ({ ...prev, [field]: value }))
-          }
+          onDraftField={onPromptDraftField}
           loadingBuiltin={promptBuiltinLoading}
           onClose={() => setPromptEditorOpen(false)}
           onApply={applyPromptSession}
           onResetBuiltin={resetPromptsToBuiltin}
+          versions={promptVersions}
+          draftVersion={promptDraftVersion}
+          onSelectVersion={onSelectPromptVersion}
+          nameInput={promptNameInput}
+          onNameInputChange={(v) => {
+            setPromptNameInput(v);
+            if (promptNameError) setPromptNameError("");
+          }}
+          nameError={promptNameError}
+          onSaveVersion={savePromptVersion}
+          onRenameVersion={renamePromptVersion}
+          onDeleteVersion={deletePromptVersion}
         />
       </AnimatedModalPresence>
       <AnimatedModalPresence when={aboutProgramOpen}>
@@ -7260,7 +7577,9 @@ export default function App() {
       </AnimatedModalPresence>
       <AnimatedModalPresence when={requestSettingsModalOpen}>
         <AdvancedRequestSettingsModal
-          onClose={closeRequestSettingsModal}
+          onDismiss={dismissRequestSettingsModal}
+          onConfirm={confirmRequestSettingsModal}
+          hasRetryTarget={Boolean(errorActionTargetFile)}
           timeout={timeout}
           setTimeout_={setTimeout_}
           retries={retries}

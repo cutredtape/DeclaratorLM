@@ -618,6 +618,8 @@ declarator-lm/
 │   └── i18n/
 │       ├── index.jsx         # React-контекст I18nProvider/useI18n/useT
 │       ├── enCatalog.js      # Словник укр.→англ. точних відповідників (~560 рядків)
+│       ├── enCatalogExtras.js # Другий, зростаючий словник укр.→англ. (той самий формат)
+│       ├── modalsEn.jsx      # Ручні англійські версії модалок (текст завеликий/довільний для словникового збігу)
 │       └── domTranslate.js   # DOM-перекладач на основі MutationObserver (~60 рядків)
 ├── index.html / index.en.html # Дві HTML-точки входу (lang="uk" / lang="en")
 ├── dist/                     # Зібраний SPA (включається в PyInstaller EXE)
@@ -697,7 +699,8 @@ declarator-lm/
 
 - `main.jsx` та `main.en.jsx` обидва обгортають `<App/>` у `<I18nProvider locale="uk"|"en">`, але лише `main.en.jsx` додатково викликає `installDomTranslator(document.body)`.
 - `App.jsx` **не використовує** `useI18n`/`useT` — увесь його текст жорстко захардкожений українською.
-- Переклад забезпечує `domTranslate.js`: початковий рекурсивний обхід DOM + `MutationObserver` (childList/subtree/characterData/attributes), який підмінює будь-який текстовий вузол чи атрибут (`title`/`aria-label`/`placeholder`/`alt`), що **точно** збігається з ключем у `enCatalog.js` — включно з вузлами, доданими пізніше (лог-картки, модалки).
+- Переклад забезпечує `domTranslate.js`: початковий рекурсивний обхід DOM + `MutationObserver` (childList/subtree/characterData/attributes), який підмінює будь-який текстовий вузол чи атрибут (`title`/`aria-label`/`placeholder`/`alt`), що **точно** збігається з ключем у словнику (`enCatalog.js` + `enCatalogExtras.js`, той самий формат, другий файл росте окремо) — включно з вузлами, доданими пізніше (лог-картки, модалки).
+- Для великого/довільного rich-text контенту, який не лягає на точний словниковий збіг (наприклад, модалки довідки), замість словника — рукописний англійський аналог у `modalsEn.jsx`, підставляється напряму з `App.jsx`.
 - Виняток — `DossierCharts.jsx`, єдиний компонент, що по-справжньому інтегрований з `useI18n`/`t()` і додатково гілкується за `locale` для форматування грошей/одиниць (`"млн"/"тис"` проти `"M"/"k"`, `"грн"` проти `"UAH"`).
 
 ### 7.7 Потік даних React ↔ Python
@@ -905,7 +908,7 @@ DeclaratorLM/
 │   │   ├── UsageDashboard.jsx    # ~540 рядків: дашборд використання
 │   │   ├── VisualLogPanel.jsx    # ~860 рядків: картковий лог обробки
 │   │   ├── dossierChartConfig.js # ~130 рядків: конфігурація графіків
-│   │   ├── i18n/                 # index.jsx, enCatalog.js, domTranslate.js
+│   │   ├── i18n/                 # index.jsx, enCatalog.js(+Extras), modalsEn.jsx, domTranslate.js — детальніше в README.md
 │   │   └── index.css             # ~3900 рядків: стилі
 │   ├── index.html / index.en.html # Дві точки входу Vite
 │   ├── dist/                     # Зібраний SPA (include у PyInstaller)

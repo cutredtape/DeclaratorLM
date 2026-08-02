@@ -20,8 +20,6 @@ debug-*.log
 # Build
 build/
 dist/
-declarator-lm/node_modules/
-declarator-lm/dist/
 
 # Data (large / sensitive)
 dataset_declarations/
@@ -32,9 +30,3 @@ audit/
 audit_mode/
 compare/
 оброблені декларації/
-
-# Working docs — not informative for other contributors, session scratch
-docs/prompt-status.md
-
-# Generated knowledge-graph output (graphify)
-graphify-out/

@@ -107,6 +107,7 @@ _EPHEMERAL_SETTINGS_KEYS = frozenset({
     "prompt_session_pipeline_user_template",
     "prompt_session_dossier_system",
     "prompt_session_dossier_user_template",
+    "prompt_session_pipeline_name",
 })
 REASONING_DEBUG = os.environ.get("DECLARATOR_REASONING_DEBUG", "").strip() in {
     "1",
@@ -1103,6 +1104,11 @@ class Api:
             val = str(args.get(arg_key, "") or "").strip()
             if val:
                 data[json_key] = val
+        name_val = str(args.get("prompt_session_pipeline_name", "") or "").strip()
+        if name_val and (
+            "pipeline_system_prompt" in data or "pipeline_user_prompt_template" in data
+        ):
+            data["pipeline_prompt_name"] = name_val
         if not data:
             self._remove_session_prompt_overrides()
             return None

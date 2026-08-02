@@ -1,5 +1,12 @@
 /** Chart definitions aligned with declarator_dossier_combined.html */
 
+export const RISK_COLORS = {
+  critical: "#F87171",
+  high: "#FB923C",
+  medium: "#FBBF24",
+  low: "#4ADE80",
+};
+
 export const DOSSIER_CHART_W = 320;
 export const DOSSIER_CHART_H = 210;
 export const DOSSIER_PADL = 38;
@@ -17,9 +24,9 @@ export const DOSSIER_CHARTS = [
     rightMax: 10,
     fmt: null,
     series: [
-      { name: "Бал ризику", color: "#F87171", axis: "left", area: true, key: "risk" },
-      { name: "Знахідки", color: "#FBBF24", axis: "right", area: false, key: "finds" },
-      { name: "Червоні прапорці", color: "#FB923C", axis: "right", area: false, key: "flags" },
+      { name: "Бал ризику", color: RISK_COLORS.critical, axis: "left", area: true, key: "risk" },
+      { name: "Знахідки", color: RISK_COLORS.medium, axis: "right", area: false, key: "finds" },
+      { name: "Червоні прапорці", color: RISK_COLORS.high, axis: "right", area: false, key: "flags" },
     ],
   },
   {
@@ -27,9 +34,9 @@ export const DOSSIER_CHARTS = [
     note: "Дохід, активи та борги в одному масштабі",
     fmt: "money",
     series: [
-      { name: "Дохід", color: "#4ADE80", axis: "left", area: false, key: "income" },
+      { name: "Дохід", color: RISK_COLORS.low, axis: "left", area: false, key: "income" },
       { name: "Активи", color: "#5EC8F8", axis: "left", area: true, key: "assets" },
-      { name: "Борги", color: "#F87171", axis: "left", area: false, key: "liab" },
+      { name: "Борги", color: RISK_COLORS.critical, axis: "left", area: false, key: "liab" },
     ],
   },
   {
@@ -39,7 +46,7 @@ export const DOSSIER_CHARTS = [
     series: [
       { name: "Нерухомість", color: "#9D7BF5", axis: "left", area: true, key: "realty" },
       { name: "Авто", color: "#5EC8F8", axis: "left", area: false, key: "autos" },
-      { name: "Земля", color: "#4ADE80", axis: "left", area: false, key: "land" },
+      { name: "Земля", color: RISK_COLORS.low, axis: "left", area: false, key: "land" },
     ],
   },
 ];
@@ -72,13 +79,6 @@ export function levelOf(score) {
   if (s >= 25) return "medium";
   return "low";
 }
-
-export const RISK_COLORS = {
-  critical: "#F87171",
-  high: "#FB923C",
-  medium: "#FBBF24",
-  low: "#4ADE80",
-};
 
 export const RISK_LEVEL_UK = {
   critical: "критичний",

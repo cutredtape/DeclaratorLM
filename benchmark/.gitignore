@@ -1,0 +1,16 @@
+# Corpus declarations must never enter git
+corpus/*
+!corpus/.gitkeep
+
+# All benchmark run outputs (JSONL, reports, artifacts, secrets-adjacent logs)
+runs/
+
+# Working methodology doc + gold-set (will reference real declarants) — not for git
+METHODOLOGY.md
+goldset/
+
+# Local Python leftovers
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
