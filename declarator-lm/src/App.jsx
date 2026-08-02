@@ -3099,6 +3099,101 @@ function ParseDeclarationModal({
   );
 }
 
+function PromptVersionBar({
+  tabKey,
+  versions,
+  activeVersion,
+  nameInput,
+  onNameInputChange,
+  nameError,
+  onSelect,
+  onSave,
+  onRename,
+  onDelete,
+}) {
+  const savedNames = Object.keys(versions).sort((a, b) => a.localeCompare(b));
+  const isNamed = activeVersion !== "core" && activeVersion !== "__custom__";
+  return (
+    <div className="prompt-version-block">
+      <label className="cloud-label" htmlFor={`prompt-version-select-${tabKey}`}>
+        Версія промпту
+      </label>
+      <div className="prompt-version-row">
+        <select
+          id={`prompt-version-select-${tabKey}`}
+          className="field-input prompt-version-select"
+          value={activeVersion}
+          onChange={(e) => onSelect(tabKey, e.target.value)}
+        >
+          <option value="core">core (вбудований)</option>
+          {activeVersion === "__custom__" && (
+            <option value="__custom__" disabled>
+              — незбережені зміни —
+            </option>
+          )}
+          {savedNames.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          className="field-input prompt-version-name-input"
+          placeholder="назва версії"
+          value={nameInput}
+          onChange={(e) => onNameInputChange(e.target.value)}
+        />
+        <div className="prompt-version-actions">
+          <TooltipWrap tip="Зберегти поточний текст під цією назвою">
+            <button
+              type="button"
+              className="btn-browse prompt-version-icon-btn"
+              onClick={() => onSave(tabKey)}
+              aria-label="Зберегти версію промпту"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+          </TooltipWrap>
+          <TooltipWrap tip={isNamed ? "Перейменувати цю версію" : "Оберіть збережену версію, щоб перейменувати"}>
+            <button
+              type="button"
+              className="btn-browse prompt-version-icon-btn"
+              onClick={() => onRename(tabKey)}
+              disabled={!isNamed}
+              aria-label="Перейменувати версію промпту"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z" />
+              </svg>
+            </button>
+          </TooltipWrap>
+          <TooltipWrap tip={isNamed ? "Видалити цю версію" : "Оберіть збережену версію, щоб видалити"}>
+            <button
+              type="button"
+              className="btn-browse prompt-version-icon-btn prompt-version-icon-btn--danger"
+              onClick={() => onDelete(tabKey)}
+              disabled={!isNamed}
+              aria-label="Видалити версію промпту"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          </TooltipWrap>
+        </div>
+      </div>
+      {nameError && <p className="cloud-error prompt-version-error">{nameError}</p>}
+    </div>
+  );
+}
+
 function PromptSessionModal({
   tab,
   onTab,
@@ -3108,6 +3203,15 @@ function PromptSessionModal({
   onClose,
   onApply,
   onResetBuiltin,
+  versions,
+  draftVersion,
+  onSelectVersion,
+  nameInput,
+  onNameInputChange,
+  nameError,
+  onSaveVersion,
+  onRenameVersion,
+  onDeleteVersion,
 }) {
   return (
     <div className="cloud-modal-overlay">
@@ -3141,6 +3245,20 @@ function PromptSessionModal({
             Досьє (HTML-звіт)
           </button>
         </div>
+        {!loadingBuiltin && (
+          <PromptVersionBar
+            tabKey={tab}
+            versions={versions[tab]}
+            activeVersion={draftVersion[tab]}
+            nameInput={nameInput}
+            onNameInputChange={onNameInputChange}
+            nameError={nameError}
+            onSelect={onSelectVersion}
+            onSave={onSaveVersion}
+            onRename={onRenameVersion}
+            onDelete={onDeleteVersion}
+          />
+        )}
         <div className="cloud-modal-body prompt-editor-body">
           {loadingBuiltin && (
             <div className="deep-research-loading deep-research-loading--inline">
@@ -4028,6 +4146,16 @@ export default function App() {
     dossierUser: "",
   });
   const [promptBuiltinLoading, setPromptBuiltinLoading] = useState(false);
+  /** Cached built-in prompt texts (fetched once; "core" always resolves to this) */
+  const [promptBuiltin, setPromptBuiltin] = useState(null);
+  /** Named prompt versions saved on this session: { pipeline: {name: {system,user}}, dossier: {...} } */
+  const [promptVersions, setPromptVersions] = useState({ pipeline: {}, dossier: {} });
+  /** Which version is currently loaded into promptDraft, per tab: "core" | "__custom__" | a saved name */
+  const [promptDraftVersion, setPromptDraftVersion] = useState({ pipeline: "core", dossier: "core" });
+  const [promptNameInput, setPromptNameInput] = useState("");
+  const [promptNameError, setPromptNameError] = useState("");
+  /** Name of the version actually applied to the running session (drives the header badge + run args) */
+  const [sessionPromptNames, setSessionPromptNames] = useState({ pipeline: "core", dossier: "core" });
 
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -5128,10 +5256,42 @@ export default function App() {
     }
   };
 
+  /** Maps a session-applied name ("core" | "custom" | a saved name) to a draft-selector value. */
+  const sessionNameToDraftVersion = (tabKey, name) => {
+    if (name === "core") return "core";
+    if (name === "custom") return "__custom__";
+    return promptVersions[tabKey][name] ? name : "__custom__";
+  };
+
+  const fetchBuiltinPrompts = async () => {
+    const raw = await api().get_builtin_prompts();
+    const d = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return {
+      pipelineSystem: d.pipeline_system_prompt || "",
+      pipelineUser: d.pipeline_user_prompt_template || "",
+      dossierSystem: d.dossier_system_prompt || "",
+      dossierUser: d.dossier_user_prompt_template || "",
+    };
+  };
+
   const openPromptEditor = async () => {
     if (!api()) return;
     setPromptEditorOpen(true);
     setPromptEditorTab("pipeline");
+    setPromptNameError("");
+    let builtin = promptBuiltin;
+    if (!builtin) {
+      setPromptBuiltinLoading(true);
+      try {
+        builtin = await fetchBuiltinPrompts();
+        setPromptBuiltin(builtin);
+      } catch {
+        builtin = { pipelineSystem: "", pipelineUser: "", dossierSystem: "", dossierUser: "" };
+        setPromptBuiltin(builtin);
+      } finally {
+        setPromptBuiltinLoading(false);
+      }
+    }
     if (sessionPromptOverrides) {
       setPromptDraft({
         pipelineSystem: sessionPromptOverrides.pipelineSystem,
@@ -5139,29 +5299,121 @@ export default function App() {
         dossierSystem: sessionPromptOverrides.dossierSystem,
         dossierUser: sessionPromptOverrides.dossierUser,
       });
-      setPromptBuiltinLoading(false);
+      const dv = {
+        pipeline: sessionNameToDraftVersion("pipeline", sessionPromptNames.pipeline),
+        dossier: sessionNameToDraftVersion("dossier", sessionPromptNames.dossier),
+      };
+      setPromptDraftVersion(dv);
+      setPromptNameInput(dv.pipeline !== "core" && dv.pipeline !== "__custom__" ? dv.pipeline : "");
+    } else {
+      setPromptDraft(builtin);
+      setPromptDraftVersion({ pipeline: "core", dossier: "core" });
+      setPromptNameInput("");
+    }
+  };
+
+  /** Any manual edit invalidates the "this is version X" label until re-saved or re-selected. */
+  const onPromptDraftField = (field, value) => {
+    setPromptDraft((prev) => ({ ...prev, [field]: value }));
+    const tabKey = field.startsWith("pipeline") ? "pipeline" : "dossier";
+    setPromptDraftVersion((prev) =>
+      prev[tabKey] === "__custom__" ? prev : { ...prev, [tabKey]: "__custom__" }
+    );
+  };
+
+  const onSelectPromptVersion = (tabKey, name) => {
+    if (name === "__custom__") return;
+    let system, user;
+    if (name === "core") {
+      if (!promptBuiltin) return;
+      system = promptBuiltin[`${tabKey}System`];
+      user = promptBuiltin[`${tabKey}User`];
+    } else {
+      const v = promptVersions[tabKey][name];
+      if (!v) return;
+      system = v.system;
+      user = v.user;
+    }
+    setPromptDraft((prev) => ({ ...prev, [`${tabKey}System`]: system, [`${tabKey}User`]: user }));
+    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: name }));
+    setPromptNameInput(name === "core" ? "" : name);
+    setPromptNameError("");
+  };
+
+  const savePromptVersion = (tabKey) => {
+    const name = promptNameInput.trim();
+    if (!name) {
+      setPromptNameError("Вкажіть назву версії.");
       return;
     }
-    setPromptBuiltinLoading(true);
-    try {
-      const raw = await api().get_builtin_prompts();
-      const d = typeof raw === "string" ? JSON.parse(raw) : raw;
-      setPromptDraft({
-        pipelineSystem: d.pipeline_system_prompt || "",
-        pipelineUser: d.pipeline_user_prompt_template || "",
-        dossierSystem: d.dossier_system_prompt || "",
-        dossierUser: d.dossier_user_prompt_template || "",
-      });
-    } catch {
-      setPromptDraft({
-        pipelineSystem: "",
-        pipelineUser: "",
-        dossierSystem: "",
-        dossierUser: "",
-      });
-    } finally {
-      setPromptBuiltinLoading(false);
+    if (name.toLowerCase() === "core") {
+      setPromptNameError("Назва «core» зарезервована для вбудованого промпту.");
+      return;
     }
+    const system = promptDraft[`${tabKey}System`];
+    const user = promptDraft[`${tabKey}User`];
+    setPromptVersions((prev) => ({
+      ...prev,
+      [tabKey]: { ...prev[tabKey], [name]: { system, user } },
+    }));
+    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: name }));
+    setPromptNameError("");
+    setTaskText(`Версію промпту «${name}» збережено на сесію.`);
+  };
+
+  const renamePromptVersion = (tabKey) => {
+    const oldName = promptDraftVersion[tabKey];
+    if (oldName === "core" || oldName === "__custom__") return;
+    const newName = promptNameInput.trim();
+    if (!newName) {
+      setPromptNameError("Вкажіть нову назву.");
+      return;
+    }
+    if (newName.toLowerCase() === "core") {
+      setPromptNameError("Назва «core» зарезервована для вбудованого промпту.");
+      return;
+    }
+    if (newName !== oldName && promptVersions[tabKey][newName]) {
+      setPromptNameError(`Версія з назвою «${newName}» вже існує.`);
+      return;
+    }
+    setPromptVersions((prev) => {
+      const versions = { ...prev[tabKey] };
+      const content = versions[oldName];
+      delete versions[oldName];
+      versions[newName] = content;
+      return { ...prev, [tabKey]: versions };
+    });
+    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: newName }));
+    // Keep the header/run-args label in sync if the renamed version is the one live this session.
+    setSessionPromptNames((prev) =>
+      prev[tabKey] === oldName ? { ...prev, [tabKey]: newName } : prev
+    );
+    setPromptNameError("");
+    setTaskText(`Версію промпту перейменовано на «${newName}».`);
+  };
+
+  const deletePromptVersion = (tabKey) => {
+    const name = promptDraftVersion[tabKey];
+    if (name === "core" || name === "__custom__") return;
+    setPromptVersions((prev) => {
+      const versions = { ...prev[tabKey] };
+      delete versions[name];
+      return { ...prev, [tabKey]: versions };
+    });
+    if (promptBuiltin) {
+      setPromptDraft((prev) => ({
+        ...prev,
+        [`${tabKey}System`]: promptBuiltin[`${tabKey}System`],
+        [`${tabKey}User`]: promptBuiltin[`${tabKey}User`],
+      }));
+    }
+    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: "core" }));
+    setPromptNameInput("");
+    setPromptNameError("");
+    // Deleting a catalog entry does not touch an already-applied session override — if this
+    // version is live, it keeps running on its last-applied text under its (now orphaned) name.
+    setTaskText(`Версію промпту «${name}» видалено.`);
   };
 
   const applyPromptSession = () => {
@@ -5179,6 +5431,17 @@ export default function App() {
         dossierUser: du,
       });
     }
+    const resolveName = (tabKey, sys, usr) => {
+      const dv = promptDraftVersion[tabKey];
+      if (dv !== "__custom__") return dv;
+      const b = promptBuiltin;
+      if (b && sys === b[`${tabKey}System`].trim() && usr === b[`${tabKey}User`].trim()) return "core";
+      return "custom";
+    };
+    setSessionPromptNames({
+      pipeline: resolveName("pipeline", ps, pu),
+      dossier: resolveName("dossier", ds, du),
+    });
     setPromptEditorOpen(false);
     setTaskText("Промпти сесії оновлено. Оригінали в репозиторії не змінені.");
   };
@@ -5186,16 +5449,15 @@ export default function App() {
   const resetPromptsToBuiltin = async () => {
     if (!api()) return;
     setSessionPromptOverrides(null);
+    setSessionPromptNames({ pipeline: "core", dossier: "core" });
     setPromptBuiltinLoading(true);
     try {
-      const raw = await api().get_builtin_prompts();
-      const d = typeof raw === "string" ? JSON.parse(raw) : raw;
-      setPromptDraft({
-        pipelineSystem: d.pipeline_system_prompt || "",
-        pipelineUser: d.pipeline_user_prompt_template || "",
-        dossierSystem: d.dossier_system_prompt || "",
-        dossierUser: d.dossier_user_prompt_template || "",
-      });
+      const builtin = await fetchBuiltinPrompts();
+      setPromptBuiltin(builtin);
+      setPromptDraft(builtin);
+      setPromptDraftVersion({ pipeline: "core", dossier: "core" });
+      setPromptNameInput("");
+      setPromptNameError("");
       setTaskText("Тексти у редакторі скинуто до вбудованих; активні перевизначення сесії вимкнено.");
     } finally {
       setPromptBuiltinLoading(false);
@@ -5263,6 +5525,7 @@ export default function App() {
           prompt_session_pipeline_user_template: sessionPromptOverrides.pipelineUser,
           prompt_session_dossier_system: sessionPromptOverrides.dossierSystem,
           prompt_session_dossier_user_template: sessionPromptOverrides.dossierUser,
+          prompt_session_pipeline_name: sessionPromptNames.pipeline,
         }
       : {}),
   });
@@ -5362,6 +5625,7 @@ export default function App() {
     showHeaderTaglines,
     debugUiMode,
     sessionPromptOverrides,
+    sessionPromptNames,
   ]);
 
   useEffect(
@@ -5493,6 +5757,7 @@ export default function App() {
       const n = Number(res?.deleted_count) || 0;
       if (res?.ok !== false || n > 0) {
         setSessionPromptOverrides(null);
+        setSessionPromptNames({ pipeline: "core", dossier: "core" });
         const settingsRaw = await api().load_settings();
         const s = typeof settingsRaw === "string" ? JSON.parse(settingsRaw) : settingsRaw;
         applySettings(s);
@@ -6117,6 +6382,12 @@ export default function App() {
               {ready && showHeaderTaglines && headerSlogan ? headerSlogan : APP_UI_VERSION}
               {debugUiMode ? (
                 <>
+                  <span
+                    className="debug-badge debug-badge--prompt"
+                    title="Активна версія промпту пайплайну (DEBUG)"
+                  >
+                    {sessionPromptNames.pipeline}
+                  </span>
                   {cloudComparisonEnabled ? (
                     <span className="debug-badge-compare-wrap">
                       <span className="debug-badge debug-badge--compare">ПОРІВНЯННЯ</span>
@@ -6595,7 +6866,7 @@ export default function App() {
                       Редагувати промпт
                     </button>
                     {sessionPromptOverrides ? (
-                      <span className="prompt-session-badge">активні підміни сесії</span>
+                      <span className="prompt-session-badge">{sessionPromptNames.pipeline}</span>
                     ) : null}
                   </div>
 
@@ -7224,13 +7495,23 @@ export default function App() {
           tab={promptEditorTab}
           onTab={setPromptEditorTab}
           draft={promptDraft}
-          onDraftField={(field, value) =>
-            setPromptDraft((prev) => ({ ...prev, [field]: value }))
-          }
+          onDraftField={onPromptDraftField}
           loadingBuiltin={promptBuiltinLoading}
           onClose={() => setPromptEditorOpen(false)}
           onApply={applyPromptSession}
           onResetBuiltin={resetPromptsToBuiltin}
+          versions={promptVersions}
+          draftVersion={promptDraftVersion}
+          onSelectVersion={onSelectPromptVersion}
+          nameInput={promptNameInput}
+          onNameInputChange={(v) => {
+            setPromptNameInput(v);
+            if (promptNameError) setPromptNameError("");
+          }}
+          nameError={promptNameError}
+          onSaveVersion={savePromptVersion}
+          onRenameVersion={renamePromptVersion}
+          onDeleteVersion={deletePromptVersion}
         />
       </AnimatedModalPresence>
       <AnimatedModalPresence when={aboutProgramOpen}>

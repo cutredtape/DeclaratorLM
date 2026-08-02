@@ -638,6 +638,15 @@ body {
   letter-spacing: 0.02em;
 }
 
+.debug-badge--prompt {
+  text-transform: none;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 @keyframes debugBadgeReveal {
   0% {
     opacity: 0;
@@ -4472,6 +4481,73 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   margin-left: auto;
+}
+
+.prompt-version-block {
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.prompt-version-block .cloud-label {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.prompt-version-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.prompt-version-select {
+  flex: 1 1 130px;
+  min-width: 110px;
+  cursor: pointer;
+  background-color: var(--bg);
+  color: var(--text);
+  color-scheme: dark;
+}
+
+.prompt-version-select option {
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+.prompt-version-name-input {
+  flex: 1 1 120px;
+  min-width: 100px;
+}
+
+.prompt-version-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.prompt-version-icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.prompt-version-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.prompt-version-icon-btn--danger:not(:disabled):hover {
+  background: rgba(197, 48, 48, 0.16);
+  border-color: rgba(197, 48, 48, 0.5);
+  color: var(--err);
+}
+
+.prompt-version-error {
+  margin-top: 6px;
+  margin-bottom: 0;
 }
 
 .parse-modal.cloud-modal {

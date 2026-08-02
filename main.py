@@ -142,9 +142,11 @@ def load_prompt_overrides_file(path_str: str) -> Dict[str, Any]:
         return {}
 
 
-def pipeline_prompts_for_process(args: argparse.Namespace) -> tuple[str, str]:
+def pipeline_prompts_for_process(args: argparse.Namespace) -> tuple[str, str, str]:
+    """Returns (system_prompt, user_template, prompt_name); "core" when no session override is active."""
     system = SYSTEM_PROMPT
     user_tmpl = USER_PROMPT_TEMPLATE
+    prompt_name = "core"
     po = getattr(args, "prompt_overrides", None) or {}
     if isinstance(po, dict):
         ps = po.get("pipeline_system_prompt")
@@ -153,7 +155,10 @@ def pipeline_prompts_for_process(args: argparse.Namespace) -> tuple[str, str]:
         pu = po.get("pipeline_user_prompt_template")
         if isinstance(pu, str) and pu.strip():
             user_tmpl = pu.strip()
-    return system, user_tmpl
+        pn = po.get("pipeline_prompt_name")
+        if isinstance(pn, str) and pn.strip():
+            prompt_name = pn.strip()
+    return system, user_tmpl, prompt_name
 
 
 RISK_LEVELS = {"low", "medium", "high", "critical"}
@@ -1654,7 +1659,7 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
                 max_chars=current_limit,
             )
         sent_chars = len(compact_str)
-        system_prompt, user_tmpl = pipeline_prompts_for_process(args)
+        system_prompt, user_tmpl, prompt_name = pipeline_prompts_for_process(args)
         attempt_started = time.time()
         attempt_info: Dict[str, Any] = {
             "attempt": attempt + 1,
@@ -1832,6 +1837,7 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
             "launch_mode": launch_mode,
             "host": run_meta_host(args),
             "started_at_utc": args.started_at_utc,
+            "prompt_name": prompt_name,
         },
         "source_file": path.name,
         "declaration_id": raw_data.get("id"),
@@ -2817,6 +2823,7 @@ def main() -> None:
     def _commit_error(file_path: Path, exc: Exception, progress_line: str) -> None:
         nonlocal failed
         err_model_id, err_launch_mode = resolve_effective_model_and_mode(args)
+        _, _, err_prompt_name = pipeline_prompts_for_process(args)
         error_item = {
             "run_meta": {
                 "run_id": args.run_id,
@@ -2825,6 +2832,7 @@ def main() -> None:
                 "launch_mode": err_launch_mode,
                 "host": run_meta_host(args),
                 "started_at_utc": args.started_at_utc,
+                "prompt_name": err_prompt_name,
             },
             "source_file": file_path.name,
             "error": str(exc),

@@ -241,6 +241,7 @@ def build_summary_rows(
         row = {
             "run_seq": run_meta.get("run_seq", 0),
             "model": run_meta.get("model", ""),
+            "prompt_name": run_meta.get("prompt_name", ""),
             "run_started_at": _fmt_date(str(run_meta.get("started_at_utc", ""))),
             "source_file": item.get("source_file", ""),
             "declaration_id": item.get("declaration_id", ""),
@@ -473,6 +474,7 @@ def build_findings_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 {
                     "run_seq": run_meta.get("run_seq", 0),
                     "model": run_meta.get("model", ""),
+                    "prompt_name": run_meta.get("prompt_name", ""),
                     "run_started_at": _fmt_date(str(run_meta.get("started_at_utc", ""))),
                     "source_file": item.get("source_file", ""),
                     "declaration_id": item.get("declaration_id", ""),
@@ -695,6 +697,9 @@ def _detail_panel_inner_html(item: Dict[str, Any], row_key: str, decl_raw: str) 
     else:
         nazk_row = '<div><strong>НАЗК:</strong> <span class="meta-muted">—</span></div>'
 
+    prompt_name_disp = html_escape(
+        str((item.get("run_meta") or {}).get("prompt_name") or "").strip() or "—"
+    )
     meta = (
         f'<details class="meta-details detail-meta-top"><summary>Технічні деталі</summary>'
         f'<label class="mark-label"><input type="checkbox" class="mark-cb" data-key="{row_key}" /> Позначити рядок</label>'
@@ -702,6 +707,7 @@ def _detail_panel_inner_html(item: Dict[str, Any], row_key: str, decl_raw: str) 
         f'<div><strong>declaration_id:</strong> <span class="meta-mono">{decl_esc or "—"}</span></div>'
         f'<div><strong>user_declarant_id:</strong> <span class="meta-mono">{udecl or "—"}</span></div>'
         f'<div><strong>Тип декларації:</strong> {decl_type_disp}</div>'
+        f'<div><strong>Промпт:</strong> <span class="meta-mono">{prompt_name_disp}</span></div>'
         f"{nazk_row}</details>"
     )
 
@@ -725,6 +731,7 @@ _HTML_MAIN_HEADER_LABELS: List[str] = [
     "Бал",
     "Ризик",
     "Знах.",
+    "Промпт",
     "",
 ]
 
@@ -820,6 +827,11 @@ def write_filterable_html(
         risk_disp = html_escape(translate_risk_level(risk_lv)) if risk_lv else "—"
         risk_cell = f'<td class="rl-{html_escape(risk_cls)}"><span class="risk-badge">{risk_disp}</span></td>'
         find_cell = f'<td class="td-fcount"><span class="fcircle">{n_find}</span></td>'
+        prompt_name_val = str(run_meta.get("prompt_name", "")).strip()
+        if not prompt_name_val:
+            prompt_cell = '<td class="legacy-cell" title="Старий запис без метаданих">—</td>'
+        else:
+            prompt_cell = f"<td>{html_escape(prompt_name_val)}</td>"
         expand_cell = (
             f'<td class="td-expand"><button type="button" class="row-expand-btn" '
             f'aria-expanded="false" data-row-id="{row_id}" aria-label="Розгорнути рядок">▼</button></td>'
@@ -837,7 +849,7 @@ def write_filterable_html(
             f'data-risk-level="{html_escape(risk_lv)}" '
             f'data-declaration-type-code="{decl_type_code_attr}">'
             f'<td class="col-idx"></td>{name_cell}{pos_cell}{year_cell}{model_cell}'
-            f"{score_cell}{risk_cell}{find_cell}{expand_cell}</tr>"
+            f"{score_cell}{risk_cell}{find_cell}{prompt_cell}{expand_cell}</tr>"
         )
         detail_tr = (
             f'<tr class="row-detail{tr_class}" data-row-id="{row_id}" hidden>'
@@ -1644,6 +1656,7 @@ def main() -> None:
         [
             "run_seq",
             "model",
+            "prompt_name",
             "run_started_at",
             "source_file",
             "declaration_id",
@@ -1668,6 +1681,7 @@ def main() -> None:
         [
             "run_seq",
             "model",
+            "prompt_name",
             "run_started_at",
             "source_file",
             "declaration_id",
