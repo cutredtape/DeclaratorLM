@@ -619,6 +619,8 @@ declarator-lm/
 │   └── i18n/
 │       ├── index.jsx         # I18nProvider/useI18n/useT React context
 │       ├── enCatalog.js      # Exact-match Ukrainian→English dictionary (~560 lines)
+│       ├── enCatalogExtras.js # A second, growing Ukrainian→English dictionary (same shape)
+│       ├── modalsEn.jsx      # Hand-written English modal components (too long/free-form for dictionary matching)
 │       └── domTranslate.js   # MutationObserver-based DOM translator (~60 lines)
 ├── index.html / index.en.html # Two HTML entry points (lang="uk" / lang="en")
 ├── dist/                     # Built SPA (bundled into the PyInstaller EXE)
@@ -698,7 +700,8 @@ Language is a property of the process, not of React state: it's chosen by a flag
 
 - Both `main.jsx` and `main.en.jsx` wrap `<App/>` in `<I18nProvider locale="uk"|"en">`, but only `main.en.jsx` additionally calls `installDomTranslator(document.body)`.
 - `App.jsx` **does not use** `useI18n`/`useT` at all — its text is hardcoded Ukrainian throughout.
-- The actual translation is done by `domTranslate.js`: an initial recursive DOM walk plus a `MutationObserver` (childList/subtree/characterData/attributes) that swaps in any text node or attribute (`title`/`aria-label`/`placeholder`/`alt`) that **exactly** matches a key in `enCatalog.js` — including nodes added later (log cards, modals).
+- The actual translation is done by `domTranslate.js`: an initial recursive DOM walk plus a `MutationObserver` (childList/subtree/characterData/attributes) that swaps in any text node or attribute (`title`/`aria-label`/`placeholder`/`alt`) that **exactly** matches a key in the dictionary (`enCatalog.js` + `enCatalogExtras.js`, same shape, the second file growing separately) — including nodes added later (log cards, modals).
+- For large/free-form rich-text content that doesn't lend itself to exact dictionary matching (e.g. help modals), a hand-written English counterpart in `modalsEn.jsx` is swapped in directly by `App.jsx` instead of the dictionary.
 - The exception is `DossierCharts.jsx`, the one component genuinely wired into `useI18n`/`t()`, which also branches on `locale` directly for money/unit formatting ("million/thousand" vs. "M"/"k", "UAH" vs. the Ukrainian currency abbreviation).
 
 ### 7.7 React ↔ Python data flow
@@ -906,7 +909,7 @@ DeclaratorLM/
 │   │   ├── UsageDashboard.jsx    # ~540 lines: the usage dashboard
 │   │   ├── VisualLogPanel.jsx    # ~860 lines: the card-based processing log
 │   │   ├── dossierChartConfig.js # ~130 lines: chart configuration
-│   │   ├── i18n/                 # index.jsx, enCatalog.js, domTranslate.js
+│   │   ├── i18n/                 # index.jsx, enCatalog.js(+Extras), modalsEn.jsx, domTranslate.js — details in README.md
 │   │   └── index.css             # ~3,900 lines: styles
 │   ├── index.html / index.en.html # Two Vite entry points
 │   ├── dist/                     # The built SPA (bundled into the PyInstaller EXE)
