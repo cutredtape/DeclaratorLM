@@ -120,7 +120,7 @@ This is the most important section. DeclaratorLM does **not** decide who is corr
 
 > 🔁 **This absence of precise data is a double-edged sword — and both edges deserve to be named honestly:**
 > - ➕ **The upside (privacy and safety).** The model physically sees nothing sensitive. Even if a cloud provider caches your request, there are no addresses, no passports, no dates of birth in it. There's simply nothing sensitive to "leak."
-> - ➖ **The downside (verifiability).** Without a precise address or identifiers, you **cannot automatically cross-check** an object against external registries (e.g. the same apartment by address in the State Register of Property Rights). The line is drawn on the side of privacy — that's a deliberate legal trade-off, not a flaw in the tool.
+> - ➖ **The downside (verifiability).** Without a precise address or identifiers, you **cannot automatically cross-check** an object against external registries (e.g. the same apartment by address in the State Register of Property Rights). The line is drawn on the side of privacy — a deliberate legal trade-off.
 
 ### 🚫 Why the output is NOT a verdict
 
@@ -249,7 +249,8 @@ The result is a report with every declaration that person filed, laid out chrono
 - 🕵️ **Deep Research** — chronological analysis of all of one person's declarations, with charts.
 - 📊 **Ready-made reports** — interactive HTML, CSV, an LLM dossier summary.
 - 📈 **Usage dashboard** — how many were processed, the risk breakdown, the most common findings, an estimate of time saved.
-- 🛠️ **DEBUG mode** — more on this below.
+- 🛠️ **DEBUG mode** — more on this below, including named, savable prompt versions.
+- 🧪 **Benchmark tool** — a separate CLI/TUI for comparing models and prompt versions across a whole corpus (see [below](#benchmarking)).
 - 🖱️ **GUI + CLI** — a friendly app and a full command line for scripting.
 
 ---
@@ -271,7 +272,7 @@ The result is a report with every declaration that person filed, laid out chrono
 
 ## 🚀 Quick start
 
-> 💻 **Requirements (honest about the platform).** Built and tested **on Windows**: the UI uses Edge Chromium (WebView2) via `pywebview` + `pythonnet` (.NET), and some spots call Win32 directly. `pywebview` is nominally cross-platform, but running on macOS/Linux out of the box is **not guaranteed** — it would take code changes. You'll also need: **Python 3.10+**, **Node.js** (once, to build the frontend), and either **[Ollama](https://ollama.com)** for local models or an **[OpenRouter](https://openrouter.ai) key** for the cloud.
+> 💻 **Requirements.** Built and tested **on Windows**: the UI uses Edge Chromium (WebView2) via `pywebview` + `pythonnet` (.NET), and some spots call Win32 directly. `pywebview` is nominally cross-platform, but running on macOS/Linux out of the box is **not guaranteed** — it would take code changes. You'll also need: **Python 3.10+**, **Node.js** (once, to build the frontend), and either **[Ollama](https://ollama.com)** for local models or an **[OpenRouter](https://openrouter.ai) key** for the cloud.
 
 ```bash
 # 1. Install Python dependencies
@@ -315,9 +316,28 @@ This decides almost everything. The same tool with different models produces any
 | Scenario | Recommendation |
 |----------|----------------|
 | 🖥️ **Local** (private, your own GPU) | Not many home PCs can run a 32B model — and that's fine. A practical floor: **Qwen 3 or newer**, or **Llama 3 or newer**, at **12B parameters or more**, preferably a **fine-tuned checkpoint** rather than the raw original model at the same size — it tends to be more accurate for this task. Smaller models are "just to play around." |
-| 🌐 **Cloud** (OpenRouter) | In the author's own runs, **Qwen 3** and **Kimi K2.5/K2.6** have performed best — consistently accurate; Kimi K2.5 has never let me down. That said, this isn't a rigorous benchmark, just personal experience — a systematic model comparison for this specific task hasn't been done yet; it's an open question worth further testing. |
+| 🌐 **Cloud — bulk/batch runs** (cheap, fast, surface-level triage over a large volume) | A budget model is enough here: **GLM-5.2**, or one of the smaller **Qwen 3** family models, both work fine. **MiniMax M3** is very good for what it costs. **Qwen3 Coder 30B A3B Instruct** is a solid pick specifically for fast, surface-level passes over a big batch. |
+| 🌐 **Cloud — dossier / deep analysis** (accuracy matters more than cost) | **Kimi K2.5 / K2(.6)** and the **flagship Qwen** models have been the most consistently accurate in the author's own runs — the top choice for dossier mode, where you're following one person's history across years rather than skimming a batch. |
+
+As before, this is the author's personal experience running the tool, not a rigorous benchmark — but you no longer have to take that on faith: see [Benchmarking prompts and models](#benchmarking) below to run the same kind of comparison yourself, on your own corpus and model list.
 
 The rule of thumb: **weak analysis is almost always a weak model, not a broken tool.** Before drawing conclusions about quality, try a more capable model.
+
+---
+
+<a id="benchmarking"></a>
+
+## 🧪 Benchmarking prompts and models
+
+A separate tool, [`benchmark/`](benchmark/README.md) — it doesn't touch the main app or any of its files; it just reuses `main.py`'s pipeline, `report.py`, and `openrouter_client.py` as a library. Its job: run the **same declaration corpus** through **several model × prompt-version combinations** and lay the results side by side, so the model recommendations above can eventually rest on measurement instead of anecdote.
+
+- 🖥️ **CLI + TUI.** Drive it interactively — pick models, prompt versions, and how much of the corpus to use, see a cost estimate, confirm — or run it fully non-interactively for scripting (`--non-interactive`), including a `--dry-run` mode that never calls a model at all (useful for checking the setup for free).
+- 💰 **A cost estimate and a preflight check before anything is spent.** It confirms the host is reachable, the model actually exists, and does one tiny smoke-test call, then estimates the whole run's cost from the local `compact_declaration()` output size and OpenRouter's pricing — and asks for confirmation before spending anything.
+- 📊 **A comparison matrix** (`matrix.csv` / `.json` / `.html`) — one row per model×prompt combination: declarations processed and errors, the risk-score distribution (mean/median/min/max, and the low/medium/high/critical breakdown), average findings per declaration, how often the model returned an empty conclusion, average evidence/rationale length, payload size, run duration, cost in USD, and prompt/completion token totals.
+- 📁 **A full report per cell, not just aggregate numbers.** Each model×prompt combination also gets its own complete report folder (JSONL + CSV + HTML, the same format the main app produces), plus optional audit-style artifacts — so a suspicious number in the matrix can be traced straight down to the declaration that produced it.
+- 🔁 Resumable (`--resume`) if a long run gets interrupted, and its own `.gitignore` keeps the real declaration corpus and every run's output out of git — only the tool and its docs are meant to be shared.
+
+See [`benchmark/README.md`](benchmark/README.md) for installation and exact commands.
 
 ---
 
@@ -330,7 +350,7 @@ A raw NAZK declaration is ~11,000 characters of technical JSON. Here's what the 
 3. 🧮 **Computes totals** — total income, cash, property and vehicle value, liabilities.
 4. 🗑️ **Strips the noise** — internal ids, service codes, empty placeholders.
 
-> 📎 **Why "13 of 18" and not all 18 — and why that's fine.** A coder will notice right away: not every section is structured. But the rest is **not "lost"** and isn't unreadable to the model. Those 5 sections (securities, share capital participation, intangible assets, etc.) are **genuinely rare** in real declarations — there simply weren't enough examples to build a dedicated structure for them. When they do appear, they're passed to the model as a **cleaned-up raw fragment** (the AI reads it fine), not discarded. So: 13 common sections are neatly shelved, 5 rare ones are passed "as-is, but clean." Nothing disappears.
+> 📎 **Why "13 of 18" and not all 18.** Not every section is structured. But the rest is **not "lost"** and isn't unreadable to the model. Those 5 sections (securities, share capital participation, intangible assets, etc.) are **genuinely rare** in real declarations — there simply weren't enough examples to build a dedicated structure for them. When they do appear, they're passed to the model as a **cleaned-up raw fragment** (the AI reads it fine), not discarded. So: 13 common sections are neatly shelved, 5 rare ones are passed "as-is, but clean." Nothing disappears.
 
 > 🎚️ **A safety net, just in case.** Settings have an **"Economical / Detailed"** toggle (with a "?" hint right next to it that spells this out). The default is "Economical": clean compact, fast and cheap. If it ever seems the model "missed" something, switch to **"Detailed"** — and the **full raw copy** of every filled step is attached alongside the compact form, exactly as in the register's original JSON: the model sees every field and every original wording. Across all the (long) testing this was never needed — but the option is always at hand.
 
@@ -352,9 +372,9 @@ No restart needed — a **"DEBUG settings"** block appears in the sidebar immedi
 
 | 🧩 Tool | What it does |
 |---------|-------------|
-| ✏️ **Prompt editor** | Edit the system and user prompts (and the dossier prompt) right in the app — changes apply to the current session only, the project code is untouched. There's a "Reset to built-in" button. |
+| ✏️ **Prompt editor** | Edit the system and user prompts (and the dossier prompt) right in the app — changes apply to the current session only, the project code is untouched. You're no longer limited to a single draft: save as many named versions as you want per session, switch between them, rename or delete a saved one, and the version currently active shows as a badge in the header. There's still a "Reset to built-in" button for going back to `core`. |
 | 🔬 **Audit mode** | Saves the full processing chain for each declaration into its own folder: raw declaration → compact → the request payload to the model → the raw response → the parsed JSON → the normalized analysis → attempt metadata. **Seven separate toggles** — capture only what you need. Indispensable for understanding *why* the model decided the way it did. |
-| ⚖️ **Model comparison** | Runs **one** declaration through 2–4 different models and shows the results side by side — to see which model is more accurate. |
+| ⚖️ **Model comparison** | Runs **one** declaration through 2–4 different models and shows the results side by side — to see which model is more accurate. (For comparing models *and* prompt versions across a whole corpus rather than one declaration, see [Benchmarking prompts and models](#benchmarking) below.) |
 | 📄 **Dossier summary** | Without the full pipeline: the model reads a finished HTML report and appends a text summary to it. |
 | 🔄 **Regenerate HTML + CSV** | Rebuilds the report from an existing JSONL without re-analyzing. |
 | 📟 **System load** | Shows CPU / RAM / GPU while running. |
@@ -370,6 +390,8 @@ No restart needed — a **"DEBUG settings"** block appears in the sidebar immedi
 <td width="50%"><sub>✏️ Prompt editor — the system and user templates, session-scoped.</sub></td>
 </tr>
 </table>
+
+Whichever prompt version was active for a given run is recorded alongside the result and shows up as its own "Prompt" column in the report table (and in each row's detail panel) — so if a batch mixed runs made under `core` and a saved variant, you can still tell which analysis came from which prompt.
 
 ---
 
@@ -522,13 +544,15 @@ The full, detailed architecture — every API method and data format — is in *
 - Usage dashboard
 - Audit mode: saving every processing artifact
 - Resume after an interruption
-- Full prompt control from the UI (session-scoped)
+- Full prompt control from the UI (session-scoped, multiple named versions, recorded in reports)
+- A standalone benchmark tool (CLI + TUI) for comparing models and prompt versions on one corpus
 - Ukrainian and English interfaces
 
 ### 🧭 Deliberately deferred
-- **A reproducible risk-score rubric.** Right now the 0–100 score is the AI's holistic judgment from the text prompt, not a fixed point system for specific patterns (for example: "right to use a premium-class vehicle owned by a third party → +30", "cash/account balances disproportionate to declared income → +10", and so on). So the same input can score differently across models or runs — the score is currently a qualitative judgment, not strictly reproducible. Writing down explicit, checkable scoring rules is a deliberately postponed piece of work, not an oversight.
+- **A reproducible risk-score rubric.** Right now the 0–100 score is the AI's holistic judgment from the text prompt, not a fixed point system for specific patterns (for example: "right to use a premium-class vehicle owned by a third party → +30", "cash/account balances disproportionate to declared income → +10", and so on). So the same input can score differently across models or runs — the score is currently a qualitative judgment, not strictly reproducible. Writing down explicit, checkable scoring rules is a deliberately postponed piece of work.
 
 ### 🔮 Potential next steps
+- **A proper multi-model benchmark.** The tooling now exists ([Benchmarking prompts and models](#benchmarking)) — what's missing is actually running it at scale across models and publishing the results. Until then, the model recommendations in [Which model to use](#which-model) stay personal experience, not a measured comparison.
 - Structuring the rare sections 5, 7, 8, 10, 16
 - Vector search / comparison of declarations across people
 - Integration with other registries (State Land Cadastre, Unified State Register) for cross-checking
