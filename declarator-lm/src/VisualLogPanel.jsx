@@ -1,7 +1,9 @@
 /** Card-based live processing log: per-declaration cards with risk gauge, cost, and status. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useI18n } from "./i18n";
+import { createT, useI18n } from "./i18n";
 import RiskGauge, { useReducedMotion } from "./RiskGauge";
+
+const UK_T = createT("uk");
 
 const TAB_SWITCH_MS = 700;
 const FEED_FLIP_MS = 700;
@@ -43,10 +45,10 @@ function fmtCost(v) {
   return Number(v).toFixed(4);
 }
 
-function fmtDuration(sec) {
+function fmtDuration(sec, t = UK_T) {
   const n = Number(sec);
   if (Number.isNaN(n) || n <= 0) return null;
-  return `${n.toFixed(1)} с`;
+  return t("{sec} с", { sec: n.toFixed(1) });
 }
 
 function isLimitEntry(entry) {
@@ -231,7 +233,7 @@ function OkCard({ entry, enterAnim }) {
   const meta = RISK_LEVELS[lvl];
   const cost = fmtCost(entry.cost_usd);
   const finds = Number(entry.findings_count) || 0;
-  const dur = fmtDuration(entry.duration_sec);
+  const dur = fmtDuration(entry.duration_sec, t);
 
   return (
     <div
@@ -438,6 +440,7 @@ function DeclarationCard({
 }
 
 function VisualLogFooter({ runTotals, modelLabel }) {
+  const { t } = useI18n();
   if (!runTotals && !modelLabel) return null;
   const n = Number(runTotals?.n) || 0;
   const pt = Number(runTotals?.prompt_tokens) || 0;
@@ -446,13 +449,14 @@ function VisualLogFooter({ runTotals, modelLabel }) {
   const known = Number(runTotals?.cost_known_n) || 0;
   let costPart = "";
   if (n > 0 && cost != null) {
-    if (known === n) costPart = `сума ≈ $${Number(cost).toFixed(4)}`;
-    else if (known > 0) costPart = `часткова сума ≈ $${Number(cost).toFixed(4)} (${known}/${n})`;
+    const usd = `$${Number(cost).toFixed(4)}`;
+    if (known === n) costPart = t("сума ≈ {cost}", { cost: usd });
+    else if (known > 0) costPart = t("часткова сума ≈ {cost} ({known}/{n})", { cost: usd, known, n });
   }
   const model = runTotals?.model || modelLabel || "";
   const parts = [
     model,
-    n > 0 ? `токени in=${pt} out=${ct}` : "",
+    n > 0 ? t("токени in={pt} out={ct}", { pt, ct }) : "",
     costPart,
   ].filter(Boolean);
   if (!parts.length) return null;
@@ -553,6 +557,7 @@ export default function VisualLogPanel({
   onErrorIgnore,
   onErrorRaiseLimits,
 }) {
+  const { t } = useI18n();
   const [peakBatchTotal, setPeakBatchTotal] = useState(0);
   const [layoutMode, setLayoutMode] = useState("stack");
   const [feedTab, setFeedTab] = useState("processed");
@@ -652,9 +657,9 @@ export default function VisualLogPanel({
       done.reduce((s, e) => s + Number(e.duration_sec), 0) / done.length;
     const left = Math.max(0, progress.total - progress.cur);
     const sec = Math.round(avg * left);
-    if (sec < 60) return `~${sec} с`;
-    return `~${Math.ceil(sec / 60)} хв`;
-  }, [entries, progress.cur, progress.total]);
+    if (sec < 60) return t("~{sec} с", { sec });
+    return t("~{min} хв", { min: Math.ceil(sec / 60) });
+  }, [entries, progress.cur, progress.total, t]);
 
   const cardProps = {
     isRunning,

@@ -178,6 +178,8 @@ function TileTimeSaved({ saved, manualMin }) {
 }
 
 function TileRedFlags({ t }) {
+  const { locale } = useI18n();
+  const pct = <b>{t.declarations_with_red_flags_pct || 0}%</b>;
   return (
     <div className="usage-dash-flip-metric">
       <div className="usage-dash-tile-icon usage-dash-tile-icon--red">🚩</div>
@@ -187,7 +189,7 @@ function TileRedFlags({ t }) {
       </div>
       </div>
       <div className="usage-dash-tile-foot usage-dash-tile-foot--flip">
-        в <b>{t.declarations_with_red_flags_pct || 0}%</b> декларацій ≥ 1 прапорець
+        {locale === "en" ? <>{pct} of declarations have ≥ 1 flag</> : <>в {pct} декларацій ≥ 1 прапорець</>}
       </div>
     </div>
   );
@@ -301,7 +303,14 @@ function TileYears({ years }) {
   );
 }
 
+/** time_label comes from usage_dashboard.py in Ukrainian: "сьогодні, 14:05", "вчора, 09:30" or a date. */
+function localizeSessionTime(label, locale) {
+  if (locale !== "en" || !label) return label;
+  return label.replace(/^сьогодні/, "today").replace(/^вчора/, "yesterday");
+}
+
 function TileLastSession({ last }) {
+  const { locale } = useI18n();
   if (!last) {
     return (
       <div className="usage-dash-flip-metric">
@@ -323,7 +332,7 @@ function TileLastSession({ last }) {
       </div>
       </div>
       <div className="usage-dash-tile-foot usage-dash-tile-foot--flip">
-        {last.time_label || "—"}
+        {localizeSessionTime(last.time_label, locale) || "—"}
         {last.critical_count > 0 ? (
           <>
             {" "}

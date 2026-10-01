@@ -11,6 +11,7 @@ FINDING_TYPE_UK: Dict[str, str] = {
     "related_party": "Майно на членів сім'ї / третіх осіб",
     "asset_valuation": "Відсутність / заниження вартості активів",
     "transaction_pattern": "Патерни операцій / відчуження",
+    "conflict_of_interest": "Конфлікт інтересів",
     "other": "Інше",
 }
 

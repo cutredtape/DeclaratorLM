@@ -2,6 +2,7 @@
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -151,7 +152,12 @@ def profile_value(item: Dict[str, Any], field: str) -> str:
     return ""
 
 
-_DEEP_RESEARCH_ROOT = Path(__file__).resolve().parent / "deep_research"
+# Корінь даних передає webview_app (DECLARATOR_DATA_DIR); в exe сам report.py
+# лежить у тимчасовій теці розпакування, тож від __file__ рахувати не можна.
+_DATA_ROOT = os.environ.get("DECLARATOR_DATA_DIR", "").strip()
+_DEEP_RESEARCH_ROOT = (
+    Path(_DATA_ROOT).expanduser().resolve() if _DATA_ROOT else Path(__file__).resolve().parent
+) / "deep_research"
 
 
 def is_dossier_report_input(input_path: Path) -> bool:
@@ -323,6 +329,57 @@ def _chips_from_list(items: Any) -> str:
     return "".join(chips)
 
 
+def _merge_support(finding: Dict[str, Any]) -> Optional[Tuple[int, int]]:
+    """(k, N) із "_merge_support": "k/N", який пише jev/merge.py для
+    записів режиму реплік; None для звичайного одиночного прогону."""
+    raw = str(finding.get("_merge_support", "") or "")
+    k_str, sep, n_str = raw.partition("/")
+    if not sep:
+        return None
+    try:
+        k, n = int(k_str), int(n_str)
+    except ValueError:
+        return None
+    return (k, n) if 0 < k <= n else None
+
+
+def _merge_support_badge(finding: Dict[str, Any]) -> str:
+    sup = _merge_support(finding)
+    if sup is None or sup[1] < 2:
+        return ""
+    k, n = sup
+    # Однаковий вигляд для будь-якої підтримки: знахідки «2 з 2» і «1 з 2»
+    # виявляються влучними однаково часто — виділяти одні й приглушувати інші
+    # означало б обіцяти надійність, якої дані не показують.
+    tip = (
+        f"Цю знахідку незалежно дали {k} з {n} прогонів моделі (об'єднано через Jev). "
+        "Це відтворюваність, а не достовірність: репліки однієї моделі повторюють "
+        "і влучні, і хибні знахідки."
+    )
+    return (
+        f'<span class="badge support" title="{html_escape(tip)}">'
+        f"{k} з {n} прогонів</span>"
+    )
+
+
+def _grounding_badge(finding: Dict[str, Any]) -> str:
+    """Попередження, якщо Jev не знайшов у декларації фактів знахідки
+    (jev/verify.py, docs/JEV.md §3.7). Позначка лише для < 0.5: підтверджені
+    знахідки — норма (~90%), бейдж на кожній був би шумом."""
+    try:
+        g = float(finding.get("_jev_grounded"))
+    except (TypeError, ValueError):
+        return ""
+    if g >= 0.5:
+        return ""
+    tip = (
+        f"Jev не знайшов у декларації частини фактів цієї знахідки (суми, дати, майно чи "
+        f"власники не збігаються; {g:.2f}). Часто знахідка правильна по суті, але з хибними "
+        "цифрами — звірте їх із декларацією."
+    )
+    return f'<span class="badge grounding-warn" title="{html_escape(tip)}">⚠ факти не збігаються</span>'
+
+
 def _render_findings_html(findings: List[Any]) -> str:
     """Finding cards: severity pill, title, rationale, collapsible details."""
     if not findings:
@@ -384,7 +441,7 @@ def _render_findings_html(findings: List[Any]) -> str:
             if title
             else '<span class="title muted">(без заголовка)</span>'
         )
-        badges = "".join([type_badge, conf_badge])
+        badges = "".join([_grounding_badge(f), _merge_support_badge(f), type_badge, conf_badge])
         cards.append(
             f'<article class="finding {sev_cls}">'
             "<header>"
@@ -488,6 +545,8 @@ def build_findings_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     "finding_type": translate_finding_type(finding.get("type", "")),
                     "severity": translate_severity(sev_raw),
                     "confidence": finding.get("confidence", ""),
+                    "merge_support": finding.get("_merge_support", ""),
+                    "jev_grounded": finding.get("_jev_grounded", ""),
                     "evidence": " | ".join(to_str_list(finding.get("evidence"))),
                     "rationale": finding.get("rationale", ""),
                     "_sev_rank": severity_sort_rank(sev_raw),
@@ -700,6 +759,19 @@ def _detail_panel_inner_html(item: Dict[str, Any], row_key: str, decl_raw: str) 
     prompt_name_disp = html_escape(
         str((item.get("run_meta") or {}).get("prompt_name") or "").strip() or "—"
     )
+    merge_meta = (item.get("run_meta") or {}).get("merge")
+    merge_row = ""
+    if isinstance(merge_meta, dict) and len(merge_meta.get("source_runs") or []) >= 2:
+        scores = merge_meta.get("replica_risk_scores") or []
+        scores_txt = (
+            " · бали прогонів: " + " / ".join(html_escape(s) for s in scores)
+            if scores else ""
+        )
+        merge_row = (
+            f'<div><strong>Об\'єднання:</strong> {len(merge_meta["source_runs"])} прогонів, '
+            f'{html_escape(merge_meta.get("n_findings_raw", "—"))} знахідок → '
+            f'{html_escape(merge_meta.get("n_findings_merged", "—"))} (Jev){scores_txt}</div>'
+        )
     meta = (
         f'<details class="meta-details detail-meta-top"><summary>Технічні деталі</summary>'
         f'<label class="mark-label"><input type="checkbox" class="mark-cb" data-key="{row_key}" /> Позначити рядок</label>'
@@ -708,7 +780,7 @@ def _detail_panel_inner_html(item: Dict[str, Any], row_key: str, decl_raw: str) 
         f'<div><strong>user_declarant_id:</strong> <span class="meta-mono">{udecl or "—"}</span></div>'
         f'<div><strong>Тип декларації:</strong> {decl_type_disp}</div>'
         f'<div><strong>Промпт:</strong> <span class="meta-mono">{prompt_name_disp}</span></div>'
-        f"{nazk_row}</details>"
+        f"{merge_row}{nazk_row}</details>"
     )
 
     left = (
@@ -815,10 +887,18 @@ def write_filterable_html(
         )
         pos_cell = f"<td>{html_escape(pos_wp) if pos_wp else '—'}</td>"
         year_cell = f"<td>{html_escape(year) if year else '—'}</td>"
+        merge_meta = run_meta.get("merge") if isinstance(run_meta.get("merge"), dict) else {}
+        n_merged_runs = len(merge_meta.get("source_runs") or [])
+        merge_tag = (
+            f' <span class="merge-tag" title="Об\'єднано з {n_merged_runs} прогонів через Jev">'
+            f"×{n_merged_runs}</span>"
+            if n_merged_runs >= 2
+            else ""
+        )
         if not model:
             model_cell = '<td class="legacy-cell" title="Старий запис без метаданих">(без моделі)</td>'
         else:
-            model_cell = f"<td>{html_escape(model)}</td>"
+            model_cell = f"<td>{html_escape(model)}{merge_tag}</td>"
 
         score_disp = html_escape(score_str) if score_str else "—"
         score_cell = (
@@ -1005,6 +1085,14 @@ def write_filterable_html(
       display: inline-block; padding: 1px 7px; border-radius: 999px;
       background: #fff; color: #334155; font-size: 11px; line-height: 1.6;
       border: 1px solid #e2e8f0; white-space: nowrap;
+    }}
+    .badge.support {{ cursor: help; font-variant-numeric: tabular-nums; }}
+    .badge.grounding-warn {{ cursor: help; background: #fef3c7; color: #92400e; border-color: #f59e0b; font-weight: 600; }}
+    .merge-tag {{
+      display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 4px;
+      background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;
+      font-size: 11px; font-weight: 600; line-height: 1.5; cursor: help;
+      font-variant-numeric: tabular-nums;
     }}
     .sev-pill {{
       display: inline-block; padding: 2px 9px; border-radius: 999px;
@@ -1695,6 +1783,8 @@ def main() -> None:
             "finding_type",
             "severity",
             "confidence",
+            "merge_support",
+            "jev_grounded",
             "evidence",
             "rationale",
         ],

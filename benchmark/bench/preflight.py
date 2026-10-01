@@ -172,17 +172,21 @@ def smoke_openrouter(model: ModelSpec, *, timeout_sec: int = 60) -> tuple[bool, 
     from openrouter_client import call_openrouter_text
 
     try:
+        # Reasoning models (e.g. Qwen Flash) spend max_tokens on reasoning first;
+        # 8 is enough for non-reasoning chat but yields empty content here.
         txt = call_openrouter_text(
             model=model.model_id,
             system_prompt="Reply with exactly: OK",
             user_prompt="Say OK",
             host=model.host,
             timeout_sec=timeout_sec,
-            num_predict=8,
+            num_predict=256,
             api_key=model.api_key,
         )
         preview = str(txt or "").strip()[:80]
-        return True, f"smoke OK ({preview or 'порожня відповідь'})"
+        if not preview:
+            return False, "smoke не пройшов: порожня відповідь від моделі"
+        return True, f"smoke OK ({preview})"
     except Exception as exc:  # noqa: BLE001
         return False, f"smoke не пройшов: {exc}"
 

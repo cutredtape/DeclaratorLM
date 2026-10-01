@@ -19,12 +19,15 @@ export const DOSSIER_PLOTH = DOSSIER_CHART_H - DOSSIER_PADT - DOSSIER_PADB;
 export const DOSSIER_CHARTS = [
   {
     title: "Індикатори ризику",
-    note: "Бал ризику (зліва 0–100) · Знахідки, червоні прапорці (справа, шт.)",
+    note: "Бал ризику й зміни між роками (зліва 0–100) · Знахідки, червоні прапорці (справа, шт.)",
     leftMax: 100,
     rightMax: 10,
     fmt: null,
     series: [
       { name: "Бал ризику", color: RISK_COLORS.critical, axis: "left", area: true, key: "risk" },
+      // Бал Jev для пари «попередня → ця декларація» (docs/JEV.md §3.5). У першої
+      // декларації значення немає — skipNull: лінія починається з другого року.
+      { name: "Зміни між роками (Jev)", color: "#A78BFA", axis: "left", area: false, key: "change", skipNull: true, stem: true },
       { name: "Знахідки", color: RISK_COLORS.medium, axis: "right", area: false, key: "finds" },
       { name: "Червоні прапорці", color: RISK_COLORS.high, axis: "right", area: false, key: "flags" },
     ],
@@ -116,6 +119,11 @@ export function analyzedIndices(records, count) {
     if (records[i]?.status === "analyzed") out.push(i);
   }
   return out;
+}
+
+export function isMissingValue(record, key) {
+  const v = record?.[key];
+  return v === null || v === undefined || Number.isNaN(Number(v));
 }
 
 export function chartValue(record, key) {

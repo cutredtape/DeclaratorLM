@@ -34,7 +34,8 @@ def validate_user_template(user_tmpl: str) -> None:
         raise PromptValidationError(
             f"User-шаблон повинен містити {_PAYLOAD_PLACEHOLDER}"
         )
-    stripped = user_tmpl.replace(_PAYLOAD_PLACEHOLDER, "")
+    # Екрановані {{...}} — легальний літеральний текст для .format(), не плейсхолдер.
+    stripped = user_tmpl.replace(_PAYLOAD_PLACEHOLDER, "").replace("{{", "").replace("}}", "")
     leftovers = _OTHER_BRACE_RE.findall(stripped)
     if leftovers:
         raise PromptValidationError(
@@ -96,7 +97,7 @@ def discover_prompts(prompts_dir: Optional[Path] = None) -> Tuple[List[PromptSpe
 
 
 def builtin_core_as_prompt() -> PromptSpec:
-    """Load the project's built-in SYSTEM/USER prompts as a PromptSpec named 'core'."""
+    """Load the project's built-in SYSTEM/USER prompts as a PromptSpec named 'core-2'."""
     import sys
 
     project_root = Path(__file__).resolve().parents[2]
@@ -106,7 +107,7 @@ def builtin_core_as_prompt() -> PromptSpec:
 
     validate_user_template(USER_PROMPT_TEMPLATE)
     return PromptSpec(
-        name="core",
+        name="core-2",
         path=project_root / "main.py",
         system_prompt=SYSTEM_PROMPT.strip(),
         user_prompt_template=USER_PROMPT_TEMPLATE.strip(),

@@ -17,12 +17,24 @@ React SPA, що виконується всередині PyWebView-вікна. 
 ```
 declarator-lm/
 ├── src/
-│   ├── App.jsx       # Весь UI ~6100 рядків (один компонент + хелпери)
-│   └── index.css     # Стилі ~3900 рядків
-├── dist/             # Зібраний SPA (включається в PyInstaller EXE)
+│   ├── App.jsx               # Основний UI, ~8 600 рядків (один компонент + хелпери)
+│   ├── DossierPanel.jsx      # Живий вигляд досьє під час Deep Research
+│   ├── DossierCharts.jsx     # Графіки досьє (ризик, фінанси, майно)
+│   ├── UsageDashboard.jsx    # Дашборд «Зведення за весь час»
+│   ├── VisualLogPanel.jsx    # Картковий живий лог обробки
+│   ├── RiskGauge.jsx         # Кругова шкала risk score
+│   ├── dossierChartConfig.js # Спільна конфігурація графіків досьє
+│   ├── i18n/                 # Англійська версія інтерфейсу (словники + DOM-перекладач)
+│   ├── fonts/                # e-Ukraine-Bold.woff2
+│   ├── main.jsx / main.en.jsx # Точки входу (укр./англ.)
+│   └── index.css             # Стилі, ~6 800 рядків
+├── index.html / index.en.html
+├── dist/                     # Зібраний SPA (включається в PyInstaller EXE)
 ├── package.json
 └── vite.config.js
 ```
+
+Детальний опис файлів, стану й функцій — у [STRUCTURE.md §7](../docs/STRUCTURE.md#7-фронтенд-declarator-lm).
 
 ## Розробка
 
@@ -41,7 +53,7 @@ npm run build    # → dist/  (обов'язково перед збіркою E
 | `TooltipWrap` | Обгортка з підказкою при наведенні |
 | `LabelWithTooltip` | `<label>` або `<span>` з іконкою підказки (?) |
 | `LogLine` | Рядок логу (колір залежить від вмісту: ok/error/deep/think/info) |
-| `ModelCombobox` | Combobox вибору моделі з живим пошуком |
+| `RiskGauge` | Кругова шкала risk score для карток логу й досьє |
 
 ## Основні секції UI
 
@@ -49,11 +61,12 @@ npm run build    # → dist/  (обов'язково перед збіркою E
 - Папка декларацій + кнопка Explorer
 - File Queue (ручний вибір / порядок файлів)
 - Модель (Ollama local/cloud або OpenRouter)
-- Cloud / OpenRouter параметри (host, model, api-key, кредити, тест)
+- Cloud / OpenRouter параметри (host, model, api-key, баланс, тест; для OpenRouter — «Паралель» і «Реплік»)
 - Параметри запиту (timeout, retries, max-chars, num-predict)
 - Вихідні файли (JSONL, CSV, HTML)
 - Переміщення оброблених / звіти
 - Метрики системи / звук завершення
+- Jev (лише OpenRouter): «Jev-підказка LLM» (експериментально), «Jev-перевірка фактів»
 
 ### Основна область
 - **Зведення за весь час** (дашборд плиток до запуску пайплайну): агрегація з `analysis_results.jsonl` + `usage_aggregate` у `settings.json`
@@ -61,12 +74,13 @@ npm run build    # → dist/  (обов'язково перед збіркою E
 - Кнопки: Запустити / Пауза / Скасувати / Відкрити звіт
 - Лог (авто-скрол, THINK-блоки collapsible)
 
-### DEBUG sidebar (розблоковується жестом)
-- Legacy payload toggle (compact v2 vs v1)
+### DEBUG sidebar (розблоковується жестом: Shift + 4 кліки на логотип)
+- Компактизація: формат v2/v3, глибина (+ сирі кроки), minify для v3
 - Режим аудиту: шлях + toggle-и артефактів
+- Редактор промптів сесії: пайплайн, досьє, два набори питань Jev
 - Підсумок досьє (окремий запит до моделі)
-- Порівняння двох моделей
-- Видалення слідів використання
+- Порівняння 2–4 моделей
+- Перегенерація звіту, видалення слідів використання
 
 ### Deep Research вкладка
 - Поле НАЗК user_declarant_id
@@ -91,11 +105,11 @@ const path = await api().pick_folder();
 const { files } = await api().list_declaration_files(inputDir);
 ```
 
-Логи з stdout `main.py` надходять рядок за рядком через `window.evaluate_js("window._onLogLine(...)")` → React відображає у лог-панелі.
+Логи з stdout `main.py` Python надсилає рядок за рядком через `evaluate_js("window._onLogLine(...)")` → React відображає у лог-панелі.
 
 ## Налаштування зберігаються в `../settings.json`
 
-`save_settings(settings)` — при кожній зміні налаштувань. `load_settings()` — при старті. Близько 40 ключів.
+`save_settings(settings)` — при кожній зміні налаштувань. `load_settings()` — при старті. 58 ключів (`DEFAULTS` у `webview_app.py`).
 
 ## Примітки до розробки
 

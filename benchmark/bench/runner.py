@@ -57,6 +57,8 @@ def _build_process_args(
         "save_compact_declarations": False,
         "compact_declarations_dir": "",
         "compact_legacy_payload": bool(config.compact_legacy_payload),
+        "compact_format": str(getattr(config, "compact_format", "v2") or "v2"),
+        "compact_minify": bool(getattr(config, "compact_minify", False)),
         "debug_payload_dir": "",
         "model": model.model_id,
         "host": model.host,
@@ -190,6 +192,7 @@ def _dry_run_one(
         normalize_analysis_payload,
         pipeline_prompts_for_process,
         resolve_effective_model_and_mode,
+        serialize_declaration_payload,
     )
 
     try:
@@ -197,7 +200,11 @@ def _dry_run_one(
         compact = compact_declaration(
             raw, legacy_payload=bool(args.compact_legacy_payload)
         )
-        compact_str = json.dumps(compact, ensure_ascii=False)
+        compact_str = serialize_declaration_payload(
+            compact,
+            format=getattr(args, "compact_format", "v2"),
+            minify=bool(getattr(args, "compact_minify", False)),
+        )
         if len(compact_str) > int(args.max_chars):
             raise RuntimeError(
                 f"payload_limit: {len(compact_str)} > {args.max_chars}"

@@ -3,3 +3,5 @@
 # Prefer the project venv:  venv\Scripts\python.exe -m pip install -r benchmark/requirements.txt
 
 rich>=13,<15
+matplotlib>=3.8,<4
+adjustText>=1.0,<2  # optional; plot script uses curated offsets

@@ -36,12 +36,12 @@ def _bundle_package(name: str) -> tuple[list, list, list]:
 datas = [
     (str(ROOT / "declarator-lm" / "dist"), os.path.join("declarator-lm", "dist")),
     (str(ROOT / "nazk_parser"), "nazk_parser"),
+    (str(ROOT / "jev" / "questions"), os.path.join("jev", "questions")),
 ] + _py_datas(
     [
         "main.py",
         "report.py",
         "openrouter_client.py",
-        "dossier_html_summary.py",
         "deep_research_bridge.py",
     ]
 )
@@ -52,8 +52,17 @@ hiddenimports: list[str] = [
     "main",
     "openrouter_client",
     "deep_research_bridge",
-    "dossier_html_summary",
     "report",
+    # Пакети імпортуються з main.py/webview_app.py ліниво (всередині функцій) — фіксуємо явно.
+    "jev",
+    "jev.client",
+    "jev.merge",
+    "jev.verify",
+    "dossier",
+    "dossier.charts",
+    "dossier.charts_html",
+    "dossier.changes",
+    "dossier.summary",
 ]
 
 # pywebview + pythonnet + залежності (без цього exe ~15 MB і падає на import webview)

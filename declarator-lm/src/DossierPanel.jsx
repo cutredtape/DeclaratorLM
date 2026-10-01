@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import DossierCharts from "./DossierCharts";
 import RiskGauge from "./RiskGauge";
 import { RISK_COLORS, RISK_LEVEL_UK, levelOf } from "./dossierChartConfig";
-import { useI18n } from "./i18n";
+import { createT, useI18n } from "./i18n";
+
+const UK_T = createT("uk");
 
 function cardPos(position, workplace) {
   const pos = String(position || "").trim();
@@ -30,7 +32,8 @@ export function formatYearListUk(years) {
   return `${sorted.slice(0, -1).join(", ")} та ${sorted[sorted.length - 1]}`;
 }
 
-function declCountLabel(n) {
+function declCountLabel(n, locale) {
+  if (locale === "en") return n === 1 ? "declaration" : "declarations";
   const k = n % 10;
   const k100 = n % 100;
   if (k100 >= 11 && k100 <= 14) return "декларацій";
@@ -50,7 +53,7 @@ function NowCard({
   processedCount,
   plannedTotal,
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [elapsed, setElapsed] = useState("0.0с");
   const inFlight = Array.isArray(activeProcessing) ? activeProcessing : [];
   const isParallelMode = Number(pipelineMaxConcurrent) > 1;
@@ -65,10 +68,10 @@ function NowCard({
     const oldest = Math.min(...inFlight.map((e) => e.startedAt || Date.now()));
     const id = window.setInterval(() => {
       const sec = Math.max(0, (Date.now() - oldest) / 1000);
-      setElapsed(`${sec.toFixed(1)}с`);
+      setElapsed(t("{sec}с", { sec: sec.toFixed(1) }));
     }, 80);
     return () => window.clearInterval(id);
-  }, [isRunning, inFlight.map((e) => e.source_file).join("|")]);
+  }, [isRunning, inFlight.map((e) => e.source_file).join("|"), t]);
 
   const name = person?.name || refEntry?.name || lastOkEntry?.name || "—";
   const pos = cardPos(
@@ -106,18 +109,18 @@ function NowCard({
           <div className="dossier-nc-status">
             Паралельно обробляються{" "}
             <b>{n}</b>{" "}
-            {declCountLabel(n)}{" "}
+            {declCountLabel(n, locale)}{" "}
             {inFlightYears.length > 0 ? (
               <>
-                за{" "}
+                {locale === "en" ? "for" : "за"}{" "}
                 <span className="dossier-nc-years">
                   {inFlightYears.map((y) => (
                     <span key={y} className="dossier-nc-year-badge dossier-nc-year-badge--flight">
                       {y}
                     </span>
                   ))}
-                </span>{" "}
-                {inFlightYears.length === 1 ? "рік" : "роки"}
+                </span>
+                {locale === "en" ? null : <> {inFlightYears.length === 1 ? "рік" : "роки"}</>}
               </>
             ) : null}
           </div>
@@ -206,7 +209,7 @@ function NowCard({
         <div className="dossier-nc-right">
           <div className="dossier-nc-timer">{elapsed}</div>
           <div className="dossier-nc-count">
-            декларація {idx} з {total}
+            {t("декларація {idx} з {total}", { idx, total })}
           </div>
         </div>
       </div>
@@ -270,7 +273,7 @@ function NowCard({
           <div className="dossier-nc-name">{name}</div>
           <div className="dossier-nc-pos">{pos}</div>
           <div className="dossier-nc-status dossier-nc-status--done">
-            Аналіз завершено · {processedCount} декларацій
+            {t("Аналіз завершено · {n} декларацій", { n: processedCount })}
           </div>
         </div>
       </div>
@@ -284,7 +287,7 @@ function NowCard({
         <div className="dossier-nc-pos">{pos}</div>
         <div className="dossier-nc-status">
           {plannedTotal > 0
-            ? `Готово до аналізу: ${plannedTotal} декларацій`
+            ? t("Готово до аналізу: {n} декларацій", { n: plannedTotal })
             : "Очікування декларацій…"}
         </div>
       </div>
@@ -292,7 +295,7 @@ function NowCard({
   );
 }
 
-export function dossierProgressMeta(chartData, isRunning) {
+export function dossierProgressMeta(chartData, isRunning, t = UK_T) {
   const records = Array.isArray(chartData?.records) ? chartData.records : [];
   const processedCount = chartData?.processed_count ?? 0;
   const plannedTotal = chartData?.planned_total ?? records.length;
@@ -303,7 +306,7 @@ export function dossierProgressMeta(chartData, isRunning) {
   const etaSec =
     remaining > 0 && avgDur > 0 ? Math.max(0, Math.round(remaining * avgDur)) : 0;
   if (isRunning && remaining > 0 && etaSec > 0) {
-    etaText = `~${etaSec} с залишилось`;
+    etaText = t("~{sec} с залишилось", { sec: etaSec });
   } else if (isRunning && remaining > 0) {
     etaText = "обчислення…";
   } else if (isRunning && remaining === 0 && processedCount >= plannedTotal && plannedTotal > 0) {

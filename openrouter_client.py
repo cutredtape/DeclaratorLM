@@ -20,12 +20,13 @@ from __future__ import annotations
 import json
 import re
 import socket
+import os
 from typing import Any, Dict, List, Optional
 from urllib import error, request
 
 
 DEFAULT_OPENROUTER_HOST = "https://openrouter.ai/api/v1"
-DEFAULT_OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct"
+DEFAULT_OPENROUTER_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
 
 # These headers show up in OpenRouter's rankings (optional, but recommended).
 _OPENROUTER_HTTP_REFERER = "https://github.com/declarator-lm"
@@ -211,6 +212,18 @@ def _build_chat_payload(
     # ignore it — that's safe for them, the response is just plain-text JSON.
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
+    # Reasoning-моделі можуть спалити весь бюджет на роздуми і не дійти до
+    # відповіді (qwen3.5-35b-a3b зациклюється на переліку полів схеми).
+    # Опт-ін через середовище, щоб не міняти умови решти прогонів.
+    effort = str(os.environ.get("DECLARATOR_OR_REASONING_EFFORT", "") or "").strip()
+    r_max = str(os.environ.get("DECLARATOR_OR_REASONING_MAX_TOKENS", "") or "").strip()
+    reasoning: Dict[str, Any] = {}
+    if effort in ("low", "medium", "high"):
+        reasoning["effort"] = effort
+    if r_max.isdigit():
+        reasoning["max_tokens"] = int(r_max)
+    if reasoning:
+        payload["reasoning"] = reasoning
     return payload
 
 
@@ -267,7 +280,12 @@ def _structured_outputs_unsupported_http_error(exc_text: str) -> bool:
     low = exc_text.lower()
     if "httperror 400" not in low and " 400:" not in low and '"code":400' not in low:
         return False
-    return "structured-output" in low or "structured_outputs" in low
+    return (
+        "structured-output" in low
+        or "structured_outputs" in low
+        or "json mode is not supported" in low
+        or "json_object is not supported" in low
+    )
 
 
 def _extract_message_content(data: Dict[str, Any]) -> str:
@@ -505,12 +523,16 @@ def _parse_openrouter_analysis_dict(
     if partial is not None:
         return partial
 
-    raise RuntimeError(
+    err = RuntimeError(
         "OpenRouter: не вдалося отримати валідний JSON аналізу НАЗК. "
         "message.content містить не ту структуру або злам, а в reasoning немає "
         "парсованого JSON (часто reasoning-моделі без ```json …```). "
         "Спробуйте іншу модель або повторіть запуск."
     )
+    # Причина злому цінніша за сам факт: без сирого тексту наступний аналіз сліпий.
+    err.raw_content = content
+    err.raw_reasoning = reasoning_blob
+    raise err
 
 
 def call_openrouter(
@@ -601,9 +623,19 @@ def call_openrouter(
 
     from main import extract_json_from_model_output
 
-    parsed = _parse_openrouter_analysis_dict(
-        message_content, reasoning_blob, extract_json_from_model_output
-    )
+    try:
+        parsed = _parse_openrouter_analysis_dict(
+            message_content, reasoning_blob, extract_json_from_model_output
+        )
+    except RuntimeError as exc:
+        # Без провайдера і finish_reason сирий текст мало що пояснює: та сама модель
+        # обслуговується різними провайдерами, і поводяться вони по-різному.
+        ch = (data.get("choices") or [{}])[0] if isinstance(data, dict) else {}
+        exc.provider = data.get("provider") if isinstance(data, dict) else None
+        exc.finish_reason = ch.get("finish_reason")
+        exc.native_finish_reason = ch.get("native_finish_reason")
+        exc.usage = data.get("usage") if isinstance(data, dict) else None
+        raise
     if return_debug_trace:
         return {
             "analysis": parsed,

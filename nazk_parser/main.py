@@ -3,7 +3,7 @@
 Run from the nazk_parser directory:
   python main.py
   python main.py --limit 100 --save-dir dataset_declarations
-  python main.py --user-declarant-id 3000099 --limit 500
+  python main.py --user-declarant-id <user_declarant_id> --limit 500
 
 List API parameters: https://public.nazk.gov.ua/public_api
 """

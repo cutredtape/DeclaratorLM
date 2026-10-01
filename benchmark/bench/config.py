@@ -99,6 +99,8 @@ class BenchConfig:
     retry_delay: float = 5.0
     num_predict: int = 16000
     compact_legacy_payload: bool = False
+    compact_format: str = "v2"  # v2 | v3 (LLM payload serialization only)
+    compact_minify: bool = False  # meaningful only with compact_format=v3
     max_concurrent: int = 1  # only meaningful for openrouter
     circuit_breaker_failures: int = 5
     audit_enabled: bool = True
@@ -123,6 +125,8 @@ class BenchConfig:
             "retry_delay": self.retry_delay,
             "num_predict": self.num_predict,
             "compact_legacy_payload": self.compact_legacy_payload,
+            "compact_format": self.compact_format,
+            "compact_minify": self.compact_minify,
             "max_concurrent": self.max_concurrent,
             "circuit_breaker_failures": self.circuit_breaker_failures,
             "audit_enabled": self.audit_enabled,

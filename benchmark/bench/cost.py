@@ -65,12 +65,24 @@ class CostEstimate:
         return lines
 
 
-def _compact_chars_for_file(path: Path, *, legacy: bool) -> int:
-    from main import compact_declaration
+def _compact_chars_for_file(
+    path: Path,
+    *,
+    legacy: bool,
+    compact_format: str = "v2",
+    compact_minify: bool = False,
+) -> int:
+    from main import compact_declaration, serialize_declaration_payload
 
     raw = json.loads(path.read_text(encoding="utf-8"))
     compact = compact_declaration(raw, legacy_payload=legacy)
-    return len(json.dumps(compact, ensure_ascii=False))
+    return len(
+        serialize_declaration_payload(
+            compact,
+            format=compact_format,
+            minify=compact_minify,
+        )
+    )
 
 
 def estimate_payloads(
@@ -78,11 +90,18 @@ def estimate_payloads(
     *,
     max_chars: int,
     legacy: bool = False,
+    compact_format: str = "v2",
+    compact_minify: bool = False,
 ) -> List[FilePayloadSize]:
     out: List[FilePayloadSize] = []
     for path in files:
         try:
-            n = _compact_chars_for_file(path, legacy=legacy)
+            n = _compact_chars_for_file(
+                path,
+                legacy=legacy,
+                compact_format=compact_format,
+                compact_minify=compact_minify,
+            )
             out.append(
                 FilePayloadSize(
                     name=path.name,
@@ -156,6 +175,8 @@ def build_cost_estimate(
         files,
         max_chars=config.max_chars,
         legacy=config.compact_legacy_payload,
+        compact_format=getattr(config, "compact_format", "v2"),
+        compact_minify=bool(getattr(config, "compact_minify", False)),
     )
     compact_vals = [s.compact_chars for s in sizes if s.compact_chars > 0]
     mean_c = (sum(compact_vals) / len(compact_vals)) if compact_vals else 0.0

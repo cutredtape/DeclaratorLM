@@ -84,7 +84,7 @@ def _resolve_api_keys(models: list[ModelSpec]) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="DeclaratorLM benchmark: матриця модель x промпт на benchmark/corpus"
+        description="DeclaratorLM benchmark: матриця модель x промпт на корпусі декларацій"
     )
     p.add_argument(
         "--dry-run",
@@ -126,6 +126,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="Назва промпту для включення (можна повторювати). За замовчуванням: інтерактивно / усі",
+    )
+    p.add_argument(
+        "--corpus-dir",
+        type=Path,
+        default=None,
+        help="Тека з деклараціями (типово: benchmark/corpus; для повного набору — dataset_declarations)",
     )
     p.add_argument("--max-files", type=int, default=0, help="Обмежити розмір корпусу (0=усі)")
     p.add_argument("--timeout", type=int, default=600)
@@ -191,12 +197,16 @@ def main(argv: list[str] | None = None) -> int:
     ui.banner()
 
     # --- corpus ---
-    scan = scan_corpus(BENCHMARK_DIR / "corpus")
+    corpus_dir = Path(args.corpus_dir) if args.corpus_dir else (BENCHMARK_DIR / "corpus")
+    if not corpus_dir.is_absolute():
+        corpus_dir = (PROJECT_ROOT / corpus_dir).resolve()
+    scan = scan_corpus(corpus_dir)
     ui.show_corpus(scan)
     if scan.ok_count == 0:
         ui.console.print(
             "[red]Корпус порожній або не містить валідного JSON.[/]\n"
-            f"Покладіть файли декларацій *.json у [cyan]{BENCHMARK_DIR / 'corpus'}[/] і запустіть знову."
+            f"Покладіть файли декларацій *.json у [cyan]{corpus_dir}[/] "
+            f"або вкажіть --corpus-dir dataset_declarations і запустіть знову."
         )
         return 2
 
@@ -286,11 +296,11 @@ def main(argv: list[str] | None = None) -> int:
         label=label,
         models=models,
         prompts=prompts,
-        corpus_dir=BENCHMARK_DIR / "corpus",
+        corpus_dir=corpus_dir,
         max_chars=int(args.max_chars),
         timeout=int(args.timeout),
         retries=int(args.retries),
-        max_concurrent=max(1, min(8, int(args.max_concurrent))),
+        max_concurrent=max(1, min(32, int(args.max_concurrent))),
         audit_enabled=audit_enabled,
         audit_flags=audit_flags,
         dry_run=bool(args.dry_run),

@@ -1,13 +1,14 @@
-# Corpus declarations must never enter git
+# У git їде лише інструмент (bench/, run_benchmark.py, prompts/) і готові
+# графіки метрик (figures/*.png). Декларації й виходи прогонів — лише локально.
+
+# Справжні декларації НАЗК. Ніколи не комітити.
 corpus/*
 !corpus/.gitkeep
+corpus_*/
+decl_*.json
 
-# All benchmark run outputs (JSONL, reports, artifacts, secrets-adjacent logs)
+# Виходи прогонів (JSONL, звіти, артефакти аудиту)
 runs/
-
-# Working methodology doc + gold-set (will reference real declarants) — not for git
-METHODOLOGY.md
-goldset/
 
 # Local Python leftovers
 __pycache__/

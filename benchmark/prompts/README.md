@@ -1,7 +1,7 @@
 # Версії промптів для бенчмарку
 
 Кладіть сюди JSON-файли в **тому самому форматі**, що й редактор промптів
-DEBUG у webview (`.debug_session_prompt_overrides.json`):
+DEBUG у застосунку (`.debug_session_prompt_overrides.json`):
 
 ```json
 {
@@ -20,7 +20,7 @@ DEBUG у webview (`.debug_session_prompt_overrides.json`):
   колонки `run_meta.prompt_name` у звітах.
 - Промпт сесії можна експортувати з редактора DEBUG у застосунку та вставити
   сюди як файл.
-- `example-core3.json` — кандидат із `docs/prompt-status.md` (ще не перевірений на моделі).
+- `example-core3.json` — приклад файлу-кандидата.
 
-Вбудований промпт з `main.py` завжди доступний у TUI під назвою **core**,
-навіть без файлу тут.
+Вбудований промпт із `main.py` доступний у TUI завжди, навіть без файлів тут,
+під назвою **core-2**.

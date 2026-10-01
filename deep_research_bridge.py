@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import sys
 import time
 from datetime import date
@@ -376,7 +377,250 @@ def _emit_nazk_download_progress(
         "page": int(info.get("page") or 0),
         "phase": str(info.get("phase") or ""),
     }
+    if info.get("pool") is not None:
+        payload["pool"] = int(info.get("pool") or 0)
     log_line("NAZK_DOWNLOAD_PROGRESS|" + json.dumps(payload, ensure_ascii=False))
+
+
+def _try_save_nazk_document(
+    session: Any,
+    target: Path,
+    decl_id: str,
+    *,
+    fetch_document: Any,
+    delay_sec: float,
+    log_line: Callable[[str], None],
+) -> bool:
+    """Download one document from the API and save decl_{id}.json. Returns True on success."""
+    doc, diag = fetch_document(session, decl_id)
+    if doc is None:
+        err = _format_nazk_diag(diag, context=f"документ {decl_id}")
+        log_line(f"[NAZK] Пропуск {decl_id}: {err}\n")
+        time.sleep(delay_sec)
+        return False
+    out_file = target / f"decl_{decl_id}.json"
+    try:
+        out_file.write_text(
+            json.dumps(doc, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        log_line(f"[NAZK] Не збережено {decl_id}: {exc}\n")
+        time.sleep(delay_sec)
+        return False
+    time.sleep(delay_sec)
+    return True
+
+
+def _download_nazk_ids(
+    session: Any,
+    target: Path,
+    decl_ids: list[str],
+    *,
+    lim: int,
+    skipped_existing: int,
+    fetch_document: Any,
+    delay_sec: float,
+    log_line: Callable[[str], None],
+    page: int = 0,
+) -> int:
+    """Download a list of ids in the given order. Returns the number of new saves."""
+    new_saved = 0
+    for decl_id in decl_ids:
+        if _try_save_nazk_document(
+            session,
+            target,
+            decl_id,
+            fetch_document=fetch_document,
+            delay_sec=delay_sec,
+            log_line=log_line,
+        ):
+            new_saved += 1
+            _emit_nazk_download_progress(
+                log_line,
+                {
+                    "phase": "item",
+                    "target": lim,
+                    "saved": new_saved,
+                    "skipped": skipped_existing,
+                    "page": page,
+                },
+            )
+            log_line(f"[NAZK] [{new_saved}/{lim}] збережено decl_{decl_id}.json\n")
+    return new_saved
+
+
+def _nazk_random_mode_label(mode: str) -> str:
+    return {
+        "full": "повний пул API",
+        "pool_cap": "швидкий пул",
+        "pages_cap": "обмежено сторінками",
+        "random_pages": "випадкові сторінки",
+    }.get(mode, mode)
+
+
+def _collect_random_sample_ids(
+    session: Any,
+    target: Path,
+    list_params: dict[str, Any],
+    *,
+    lim: int,
+    fetch_list_page: Any,
+    log_line: Callable[[str], None],
+    rng: secrets.SystemRandom,
+    mode: str = "pool_cap",
+    pool_cap: int = 500,
+    pages_cap: int = 15,
+    random_pages_count: int = 5,
+    api_max_pages: int = 100,
+) -> tuple[list[str], int, int, dict[str, Any] | None]:
+    """
+    Collects eligible ids (not already on disk) and returns a random sample of up to lim.
+    mode: full | pool_cap | pages_cap | random_pages
+    """
+    mode = str(mode or "pool_cap").strip().lower()
+    if mode not in ("full", "pool_cap", "pages_cap", "random_pages"):
+        mode = "pool_cap"
+    pool_cap = max(lim, min(int(pool_cap or 500), 10_000))
+    pages_cap = max(1, min(int(pages_cap or 15), api_max_pages))
+    random_pages_count = max(1, min(int(random_pages_count or 5), api_max_pages))
+
+    skipped_existing = 0
+    eligible_seen = 0
+
+    def _emit_collect(page: int, pool: int) -> None:
+        _emit_nazk_download_progress(
+            log_line,
+            {
+                "phase": "collect",
+                "target": lim,
+                "saved": 0,
+                "skipped": skipped_existing,
+                "page": page,
+                "pool": pool,
+            },
+        )
+
+    def _process_page_items(
+        items: list[dict[str, Any]],
+        page: int,
+        reservoir: list[str],
+    ) -> bool:
+        """Adds eligible ids to the reservoir. Returns True if collection should stop (pool_cap)."""
+        nonlocal eligible_seen, skipped_existing
+        for item in items:
+            decl_id = str(item.get("id") or "").strip()
+            if not decl_id:
+                continue
+            out_file = target / f"decl_{decl_id}.json"
+            if out_file.is_file():
+                skipped_existing += 1
+                continue
+            eligible_seen += 1
+            if len(reservoir) < lim:
+                reservoir.append(decl_id)
+            else:
+                j = rng.randrange(eligible_seen)
+                if j < lim:
+                    reservoir[j] = decl_id
+            if mode == "pool_cap" and eligible_seen >= pool_cap:
+                return True
+        return False
+
+    def _fetch_page(page: int) -> tuple[list[dict[str, Any]], Any, dict[str, Any] | None]:
+        items, raw, transport_err = fetch_list_page(session, page, **list_params)
+        if transport_err is not None:
+            err = _format_nazk_diag(transport_err, context=f"список документів, стор. {page}")
+            log_line(f"[NAZK] {err}\n")
+            return [], None, {"ok": False, "errors": [err], "new_saved": 0}
+        if raw is None:
+            log_line(f"[NAZK] Порожня відповідь API на сторінці {page}. Зупинка.\n")
+            return [], raw, None
+        if isinstance(raw, dict) and raw.get("error") is not None:
+            msg = f"Помилка API НАЗК: {raw.get('error')}"
+            log_line(f"[NAZK] {msg}\n")
+            return [], raw, {"ok": False, "errors": [msg], "new_saved": 0}
+        return items, raw, None
+
+    if mode == "random_pages":
+        page_pool = list(range(1, api_max_pages + 1))
+        pages_to_fetch = sorted(rng.sample(page_pool, min(random_pages_count, len(page_pool))))
+        collected: list[str] = []
+        log_line(
+            f"[NAZK] Випадкові сторінки API: {', '.join(str(p) for p in pages_to_fetch)}\n"
+        )
+        for idx, page in enumerate(pages_to_fetch, start=1):
+            _emit_collect(page, len(collected))
+            items, _raw, err = _fetch_page(page)
+            if err is not None:
+                return [], skipped_existing, eligible_seen, err
+            if not items:
+                log_line(f"[NAZK] Сторінка {page}: елементів немає.\n")
+                continue
+            for item in items:
+                decl_id = str(item.get("id") or "").strip()
+                if not decl_id:
+                    continue
+                if (target / f"decl_{decl_id}.json").is_file():
+                    skipped_existing += 1
+                    continue
+                eligible_seen += 1
+                collected.append(decl_id)
+        sample = rng.sample(collected, lim) if len(collected) > lim else list(collected)
+        return sample, skipped_existing, eligible_seen, None
+
+    reservoir: list[str] = []
+    if mode == "full":
+        max_scan = api_max_pages
+    elif mode == "pages_cap":
+        max_scan = pages_cap
+    else:
+        max_scan = api_max_pages
+
+    for page in range(1, max_scan + 1):
+        _emit_collect(page, eligible_seen)
+        items, _raw, err = _fetch_page(page)
+        if err is not None:
+            return [], skipped_existing, eligible_seen, err
+        if not items:
+            log_line(f"[NAZK] Сторінка {page}: елементів немає. Кінець списку.\n")
+            break
+        if _process_page_items(items, page, reservoir):
+            log_line(f"[NAZK] Досягнуто ліміт пулу кандидатів ({pool_cap}). Зупинка збору.\n")
+            break
+
+    return reservoir, skipped_existing, eligible_seen, None
+
+
+def _parse_nazk_random_options(raw: Any) -> dict[str, Any]:
+    defaults: dict[str, Any] = {
+        "mode": "pool_cap",
+        "pool_cap": 500,
+        "pages_cap": 15,
+        "random_pages_count": 5,
+    }
+    if not isinstance(raw, dict):
+        return dict(defaults)
+    mode = str(raw.get("mode") or defaults["mode"]).strip().lower()
+    if mode not in ("full", "pool_cap", "pages_cap", "random_pages"):
+        mode = defaults["mode"]
+    out = dict(defaults)
+    out["mode"] = mode
+    try:
+        out["pool_cap"] = max(1, min(int(raw.get("pool_cap", defaults["pool_cap"])), 10_000))
+    except (TypeError, ValueError):
+        out["pool_cap"] = defaults["pool_cap"]
+    try:
+        out["pages_cap"] = max(1, min(int(raw.get("pages_cap", defaults["pages_cap"])), 100))
+    except (TypeError, ValueError):
+        out["pages_cap"] = defaults["pages_cap"]
+    try:
+        out["random_pages_count"] = max(
+            1, min(int(raw.get("random_pages_count", defaults["random_pages_count"])), 100)
+        )
+    except (TypeError, ValueError):
+        out["random_pages_count"] = defaults["random_pages_count"]
+    return out
 
 
 _NAZK_DECLARATION_TYPE_LABELS = {
@@ -403,13 +647,25 @@ def run_nazk_download_by_year(
     delay_sec: float = 1.5,
     declaration_type: int | None = None,
     document_type: int | None = None,
+    random_sample: bool = False,
+    random_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Page through /documents/list with NAZK API filters; save up to limit new decl_*.json.
     Year only, search only (query from 3 chars), or both together are allowed.
     declaration_type (1–4) and document_type (1–3) are optional API filters.
     Files already on disk are skipped.
+    random_sample=True — random selection within the year filter; random_options sets
+    the collection mode and limits.
     """
+    if random_sample and declaration_year is None:
+        return {
+            "ok": False,
+            "errors": ["Випадкова вибірка потребує фільтра за роком декларації."],
+        }
+
+    rand_opts = _parse_nazk_random_options(random_options if random_sample else None)
+
     max_year = date.today().year
     y: int | None = None
     if declaration_year is not None:
@@ -504,6 +760,7 @@ def run_nazk_download_by_year(
     max_pages = 100
     new_saved = 0
     skipped_existing = 0
+    eligible_count: int | None = None
 
     filter_bits: list[str] = []
     if y is not None:
@@ -514,96 +771,139 @@ def run_nazk_download_by_year(
         filter_bits.append(_NAZK_DECLARATION_TYPE_LABELS.get(decl_t, f"вид {decl_t}"))
     if doc_t is not None:
         filter_bits.append(_NAZK_DOCUMENT_TYPE_LABELS.get(doc_t, f"тип {doc_t}"))
+    mode_label = "випадкова вибірка" if random_sample else "завантаження"
     log_line(
-        f"[NAZK] Завантаження до {lim} декларацій ({', '.join(filter_bits)}) у {target}\n"
+        f"[NAZK] {mode_label.capitalize()} до {lim} декларацій ({', '.join(filter_bits)}) у {target}\n"
     )
     _emit_nazk_download_progress(
         log_line,
         {"phase": "start", "target": lim, "saved": 0, "skipped": 0, "page": 0},
     )
 
-    while new_saved < lim and page <= max_pages:
-        _emit_nazk_download_progress(
-            log_line,
-            {
-                "phase": "list",
-                "target": lim,
-                "saved": new_saved,
-                "skipped": skipped_existing,
-                "page": page,
-            },
+    if random_sample:
+        rng = secrets.SystemRandom()
+        rand_mode = str(rand_opts.get("mode") or "pool_cap")
+        log_line(
+            f"[NAZK] Режим випадкової вибірки: {_nazk_random_mode_label(rand_mode)} "
+            f"(ціль завантаження: {lim})\n"
         )
-        items, raw, transport_err = fetch_list_page(session, page, **list_params)
-        if transport_err is not None:
-            err = _format_nazk_diag(transport_err, context=f"список документів, стор. {page}")
-            log_line(f"[NAZK] {err}\n")
+        sample_ids, skipped_existing, eligible_count, collect_err = _collect_random_sample_ids(
+            session,
+            target,
+            list_params,
+            lim=lim,
+            fetch_list_page=fetch_list_page,
+            log_line=log_line,
+            rng=rng,
+            mode=rand_mode,
+            pool_cap=int(rand_opts.get("pool_cap") or 500),
+            pages_cap=int(rand_opts.get("pages_cap") or 15),
+            random_pages_count=int(rand_opts.get("random_pages_count") or 5),
+        )
+        if collect_err is not None:
+            return {**collect_err, "dir": str(target), "skipped_existing": skipped_existing}
+        if not sample_ids:
             return {
                 "ok": False,
-                "errors": [err],
+                "errors": [
+                    "Не вдалося зберегти жодної нової декларації "
+                    "(порожній список за фільтром, усі файли вже є або помилки завантаження).",
+                ],
                 "dir": str(target),
-                "new_saved": new_saved,
+                "new_saved": 0,
+                "skipped_existing": skipped_existing,
+                "eligible_count": eligible_count,
+                "random_sample": True,
             }
-        if raw is None:
-            log_line(f"[NAZK] Порожня відповідь API на сторінці {page}. Зупинка.\n")
-            break
-        if isinstance(raw, dict) and raw.get("error") is not None:
-            msg = f"Помилка API НАЗК: {raw.get('error')}"
-            log_line(f"[NAZK] {msg}\n")
-            return {"ok": False, "errors": [msg], "dir": str(target), "new_saved": new_saved}
-        if not items:
-            log_line(f"[NAZK] Сторінка {page}: елементів немає. Кінець списку.\n")
-            break
-
-        for item in items:
-            if new_saved >= lim:
-                break
-            decl_id = str(item.get("id") or "").strip()
-            if not decl_id:
-                continue
-            out_file = target / f"decl_{decl_id}.json"
-            if out_file.is_file():
-                skipped_existing += 1
-                _emit_nazk_download_progress(
-                    log_line,
-                    {
-                        "phase": "item",
-                        "target": lim,
-                        "saved": new_saved,
-                        "skipped": skipped_existing,
-                        "page": page,
-                    },
-                )
-                continue
-            doc, diag = fetch_document(session, decl_id)
-            if doc is None:
-                err = _format_nazk_diag(diag, context=f"документ {decl_id}")
-                log_line(f"[NAZK] Пропуск {decl_id}: {err}\n")
-                time.sleep(delay_sec)
-                continue
-            try:
-                out_file.write_text(
-                    json.dumps(doc, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-            except OSError as exc:
-                log_line(f"[NAZK] Не збережено {decl_id}: {exc}\n")
-                time.sleep(delay_sec)
-                continue
-            new_saved += 1
+        log_line(
+            f"[NAZK] Випадкова вибірка: {len(sample_ids)} з {eligible_count} кандидатів "
+            f"({', '.join(filter_bits)})\n"
+        )
+        new_saved = _download_nazk_ids(
+            session,
+            target,
+            sample_ids,
+            lim=lim,
+            skipped_existing=skipped_existing,
+            fetch_document=fetch_document,
+            delay_sec=delay_sec,
+            log_line=log_line,
+        )
+    else:
+        while new_saved < lim and page <= max_pages:
             _emit_nazk_download_progress(
                 log_line,
                 {
-                    "phase": "item",
+                    "phase": "list",
                     "target": lim,
                     "saved": new_saved,
                     "skipped": skipped_existing,
                     "page": page,
                 },
             )
-            log_line(f"[NAZK] [{new_saved}/{lim}] збережено {out_file.name} (стор. {page})\n")
-            time.sleep(delay_sec)
+            items, raw, transport_err = fetch_list_page(session, page, **list_params)
+            if transport_err is not None:
+                err = _format_nazk_diag(transport_err, context=f"список документів, стор. {page}")
+                log_line(f"[NAZK] {err}\n")
+                return {
+                    "ok": False,
+                    "errors": [err],
+                    "dir": str(target),
+                    "new_saved": new_saved,
+                }
+            if raw is None:
+                log_line(f"[NAZK] Порожня відповідь API на сторінці {page}. Зупинка.\n")
+                break
+            if isinstance(raw, dict) and raw.get("error") is not None:
+                msg = f"Помилка API НАЗК: {raw.get('error')}"
+                log_line(f"[NAZK] {msg}\n")
+                return {"ok": False, "errors": [msg], "dir": str(target), "new_saved": new_saved}
+            if not items:
+                log_line(f"[NAZK] Сторінка {page}: елементів немає. Кінець списку.\n")
+                break
 
-        page += 1
+            for item in items:
+                if new_saved >= lim:
+                    break
+                decl_id = str(item.get("id") or "").strip()
+                if not decl_id:
+                    continue
+                out_file = target / f"decl_{decl_id}.json"
+                if out_file.is_file():
+                    skipped_existing += 1
+                    _emit_nazk_download_progress(
+                        log_line,
+                        {
+                            "phase": "item",
+                            "target": lim,
+                            "saved": new_saved,
+                            "skipped": skipped_existing,
+                            "page": page,
+                        },
+                    )
+                    continue
+                if _try_save_nazk_document(
+                    session,
+                    target,
+                    decl_id,
+                    fetch_document=fetch_document,
+                    delay_sec=delay_sec,
+                    log_line=log_line,
+                ):
+                    new_saved += 1
+                    _emit_nazk_download_progress(
+                        log_line,
+                        {
+                            "phase": "item",
+                            "target": lim,
+                            "saved": new_saved,
+                            "skipped": skipped_existing,
+                            "page": page,
+                        },
+                    )
+                    log_line(f"[NAZK] [{new_saved}/{lim}] збережено {out_file.name} (стор. {page})\n")
+
+            page += 1
 
     if new_saved == 0:
         return {
@@ -630,14 +930,20 @@ def run_nazk_download_by_year(
     log_line(
         f"[NAZK] Готово. Нових файлів: {new_saved}, пропущено (вже є): {skipped_existing}.\n"
     )
-    return {
+    result: dict[str, Any] = {
         "ok": True,
         "dir": str(target),
         "new_saved": new_saved,
         "skipped_existing": skipped_existing,
         "declaration_year": y,
         "search_query": q or None,
+        "random_sample": bool(random_sample),
     }
+    if random_sample:
+        result["eligible_count"] = eligible_count
+        result["random_mode"] = str(rand_opts.get("mode") or "pool_cap")
+        result["random_options"] = rand_opts
+    return result
 
 
 # --- DEEP_RESEARCH_END

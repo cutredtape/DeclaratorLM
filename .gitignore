@@ -2,6 +2,10 @@
 settings.json
 .declarator_secrets.json
 .run_control.json
+.debug_session_*.json
+.claude/
+# Jev-кеші: судження Jev по конкретних деклараціях — рантайм-артефакт, не джерело.
+.jev_catalog_cache/
 
 # Python
 venv/
@@ -26,15 +30,17 @@ declarator-lm/dist/
 # Data (large / sensitive)
 dataset_declarations/
 dataset_declarations_done/
-nazk_parser/dataset_declarations0/
+nazk_parser/dataset_declarations*/
 deep_research/
 audit/
 audit_mode/
 compare/
 оброблені декларації/
 
-# Working docs — not informative for other contributors, session scratch
-docs/prompt-status.md
+# Локальні робочі документи (беклоги, журнали експериментів) — не для публіки
+_private/
 
-# Generated knowledge-graph output (graphify)
+# Generated knowledge-graph output (graphify) and its local config
 graphify-out/
+OLDgraphify-out/
+.graphifyignore

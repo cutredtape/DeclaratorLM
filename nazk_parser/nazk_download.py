@@ -1,13 +1,12 @@
-"""Download declarations from the API with filtering, plus local-folder scanning."""
+"""Download declarations from the open NAZK API: a paged dataset or every declaration of one person."""
 
 from __future__ import annotations
 
 import json
 import os
 import time
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Optional
 
-from filters import FilterCriteria, matches_filters, row_preview
 from nazk_client import fetch_document, fetch_list_page, get_robust_session
 
 
@@ -214,95 +213,3 @@ def download_all_for_user_declarant(
             time.sleep(30)
 
     return saved, found
-
-
-def download_with_filters(
-    criteria: FilterCriteria,
-    *,
-    match_limit: int,
-    save_dir: str = "dataset_declarations",
-    delay_sec: float = 1.5,
-    max_pages: int = 100,
-    list_params: Optional[dict[str, Any]] = None,
-    on_progress: Optional[Callable[[dict[str, Any]], None]] = None,
-) -> tuple[int, int]:
-    """
-    Walk list pages, download full JSON, save only documents that pass matches_filters.
-    Returns (saved matches count, documents inspected).
-    """
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
-    session = get_robust_session()
-    lp = dict(list_params or {})
-
-    saved = 0
-    examined = 0
-    page = 1
-
-    while saved < match_limit and page <= max_pages:
-        items, raw, _transport_err = fetch_list_page(session, page, **lp)
-        if raw is None:
-            time.sleep(10)
-            continue
-        if not items:
-            break
-
-        for item in items:
-            if saved >= match_limit:
-                break
-
-            decl_id = item["id"]
-            file_path = os.path.join(save_dir, f"decl_{decl_id}.json")
-
-            try:
-                if os.path.exists(file_path):
-                    with open(file_path, encoding="utf-8") as f:
-                        doc = json.load(f)
-                else:
-                    doc, _doc_err = fetch_document(session, decl_id)
-                    if doc is None:
-                        continue
-                    time.sleep(delay_sec)
-
-                examined += 1
-                if matches_filters(doc, criteria):
-                    if not os.path.exists(file_path):
-                        with open(file_path, "w", encoding="utf-8") as f:
-                            json.dump(doc, f, ensure_ascii=False, indent=4)
-                    saved += 1
-                    if on_progress:
-                        on_progress(
-                            {
-                                "saved": saved,
-                                "examined": examined,
-                                "last_id": decl_id,
-                                "page": page,
-                            }
-                        )
-            except (OSError, json.JSONDecodeError):
-                continue
-
-        page += 1
-
-    return saved, examined
-
-
-def scan_local_folder(
-    folder: str,
-    criteria: FilterCriteria,
-) -> Iterator[dict[str, Any]]:
-    """Iterate JSON files in a folder; yield row_preview for each match."""
-    if not os.path.isdir(folder):
-        return
-    for name in sorted(os.listdir(folder)):
-        if not name.endswith(".json"):
-            continue
-        path = os.path.join(folder, name)
-        try:
-            with open(path, encoding="utf-8") as f:
-                doc = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            continue
-        if matches_filters(doc, criteria):
-            yield row_preview(doc, source=path)

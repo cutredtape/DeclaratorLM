@@ -88,7 +88,8 @@ def scan_corpus(corpus_dir: Path) -> CorpusScan:
     if not root.is_dir():
         raise NotADirectoryError(f"Corpus path is not a directory: {root}")
 
-    json_files = sorted(root.glob("*.json"), key=lambda p: p.name.lower())
+    # Only NAZK declaration dumps — ignore manifest/batches/README companions.
+    json_files = sorted(root.glob("decl_*.json"), key=lambda p: p.name.lower())
     result.empty = len(json_files) == 0
 
     for path in json_files:

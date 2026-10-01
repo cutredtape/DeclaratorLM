@@ -37,10 +37,6 @@ class PayloadLimitExceededError(RuntimeError):
         )
 
 
-class IncompleteAnalysisError(RuntimeError):
-    """Model returned a risk_score without findings (partial / salvaged JSON)."""
-
-
 def analysis_incomplete_needs_retry(
     analysis: Any,
     *,
@@ -72,7 +68,11 @@ SYSTEM_PROMPT = """
 6) Заборонено оціночні фрази без фактів ("можливо занадто високо/низько") без прив'язки до чисел або подій.
 7) Не вигадуй відсутні ПІБ/посади/джерела - використовуй лише надані поля.
 8) Обов'язково враховуй контекст step_0 (тип декларації, період, службовий контекст).
-9) Вважай, що structured-секції покривають основні кроки; рідкісні непокриті кроки — у `raw_extras`; якщо крок відсутній — він порожній або не застосовний.
+9) Структуровані секції покривають усі кроки форми 0–17; `raw_extras` — лише запобіжник для неочікуваних даних поза цим набором. Якщо крок відсутній у payload — він порожній або не застосовний.
+10) family_assets_overview — блок звіту «Сім’я та активи». Перший елемент ЗАВЖДИ суб'єкт декларування (meta.declarant), навіть якщо активів немає (asset_count: 0, asset_examples: []). Далі — кожен член family_members, у якого є активи/доходи/рахунки. Порожніх родичів без активів можна не включати. Поле person: «ПІБ (суб'єкт декларування)» або «ПІБ (subjectRelation)»; ПІБ копіюй дослівно з meta/family_members. asset_examples: 1–3 конкретні об'єкти (тип, коротко що саме, сума якщо є), не загальні фрази.
+11) findings.involved_persons — конкретні ПІБ або «ПІБ (роль)», не лише роль («дружина»). subject_profile копіюй з meta / meta.declarant, не перефразовуй.
+12) conflict_of_interest — окремий тип від income_assets_mismatch/related_party: посада чи повноваження декларанта перетинаються з діловими/майновими інтересами (власними чи членів сім'ї) у сфері, на яку декларант впливає рішеннями чи наглядом. Це про перетин повноважень та інтересу, не про розмір статків.
+13) Масиви в даних можуть бути звичайними списками об'єктів або колонковою формою {"_cols":[...],"_rows":[[...],...]} з тими самими значеннями — інтерпретуй однаково.
 
 Формат відповіді:
 {
@@ -89,7 +89,7 @@ SYSTEM_PROMPT = """
   "findings": [
     {
       "title": "коротка назва ризику",
-      "type": "income_assets_mismatch|unexplained_wealth|related_party|asset_valuation|transaction_pattern|other",
+      "type": "income_assets_mismatch|unexplained_wealth|related_party|asset_valuation|transaction_pattern|conflict_of_interest|other",
       "severity": "low|medium|high|critical",
       "confidence": 0.0,
       "evidence": ["факт 1", "факт 2"],
@@ -122,7 +122,10 @@ USER_PROMPT_TEMPLATE = """
 - Якщо ризиків мало, все одно поверни коректний JSON з низькою оцінкою.
 - Обов'язково включай конкретику: ПІБ, посада, хто саме власник/користувач активу, суми та дати (якщо є).
 - Якщо щось НЕ підозріло - коротко поясни чому в полі clear_facts.
-- Ключово: врахуй `step_0_interpreted` (тип/період декларації, службовий статус), `financial_institutions` (банки/установи) та `raw_extras` (рідкісні непокриті кроки, якщо є).
+- Ключово: врахуй `step_0_interpreted` (тип/період декларації, службовий статус), `financial_institutions` (банки/установи), а також `valuable_movable`, `securities`, `share_capital`, `intangible_assets`, `organizations` (коли непорожні). `raw_extras` — лише якщо є неочікувані кроки поза 0–17.
+- family_assets_overview заповнюй завжди. Перший рядок — суб'єкт декларування. Далі члени сім'ї з активами. Не залишай масив порожнім, якщо в декларації є хоч один актив, дохід або рахунок.
+- owners_or_users змішує власників і користувачів; тип права дивись у rights_summary. У огляді сім'ї вкажи, хто саме і з яким правом, якщо воно є.
+- Якщо секція має форму {{"_cols":[...],"_rows":[...]}} — це той самий масив записів: колонки один раз, далі рядки значень у тому ж порядку.
 
 Дані декларації (стисла структура):
 {declaration_payload}
@@ -143,10 +146,15 @@ def load_prompt_overrides_file(path_str: str) -> Dict[str, Any]:
 
 
 def pipeline_prompts_for_process(args: argparse.Namespace) -> tuple[str, str, str]:
-    """Returns (system_prompt, user_template, prompt_name); "core" when no session override is active."""
+    """Returns (system_prompt, user_template, prompt_name); "core-2" when no session override is active.
+
+    core-2 is the second version of the built-in analysis prompt: core plus the
+    family_assets_overview/involved_persons rules (which also lift it above the 1024-token prompt
+    cache threshold) and the conflict_of_interest finding type. Older reports label it "core1x".
+    """
     system = SYSTEM_PROMPT
     user_tmpl = USER_PROMPT_TEMPLATE
-    prompt_name = "core"
+    prompt_name = "core-2"
     po = getattr(args, "prompt_overrides", None) or {}
     if isinstance(po, dict):
         ps = po.get("pipeline_system_prompt")
@@ -224,7 +232,16 @@ CONTINUE_SERVICE_MAP = {
     "0": "Не продовжує виконувати функції держави/місцевого самоврядування",
 }
 COMPACT_PLACEHOLDER_VALUES = frozenset(
-    {"", "[Конфіденційна інформація]", "[Не застосовується]"}
+    {
+        "",
+        "[Конфіденційна інформація]",
+        "[Не застосовується]",
+        "[Не відомо]",
+        "[Член сім'ї не надав інформацію]",
+        "Не застосовується",
+        "не застосовується",
+        "Не передано",
+    }
 )
 COMPACT_PROTECTED_KEYS = frozenset(
     {
@@ -249,7 +266,8 @@ COMPACT_PROTECTED_KEYS = frozenset(
         "percent-ownership",
     }
 )
-COMPACT_COVERED_STEP_NUMBERS = frozenset({0, 1, 2, 3, 4, 6, 9, 11, 12, 13, 14, 15, 17})
+# All known NAZK form steps 0–17. raw_extras remains a safety net for anything else.
+COMPACT_COVERED_STEP_NUMBERS = frozenset(range(0, 18))
 
 
 def _is_compact_placeholder(value: Any) -> bool:
@@ -700,6 +718,263 @@ def compact_financial_institutions(
     return result
 
 
+def _pick_nonempty_fields(item: Dict[str, Any], fields: tuple[str, ...]) -> Dict[str, Any]:
+    entry: Dict[str, Any] = {}
+    for field in fields:
+        value = item.get(field)
+        if not _is_compact_placeholder(value):
+            entry[field] = value
+    return entry
+
+
+def _resolve_emitent_fields(item: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for field in (
+        "emitent_ua_company_name",
+        "emitent_ukr_company_name",
+        "emitent_eng_company_name",
+        "emitent_citizen",
+    ):
+        value = item.get(field)
+        if not _is_compact_placeholder(value):
+            out["emitent"] = value
+            break
+    code = item.get("emitent_ua_company_code") or item.get("emitent_eng_company_code")
+    if not _is_compact_placeholder(code):
+        out["emitent_code"] = code
+    emitent_type = item.get("emitent_type")
+    if not _is_compact_placeholder(emitent_type):
+        out["emitent_type"] = emitent_type
+    return out
+
+
+def _resolve_step_persons(
+    value: Any,
+    person_index: Dict[str, str],
+) -> List[str]:
+    """Resolve step_7 `persons` (id, list, or NAZK placeholder text)."""
+    if _is_compact_placeholder(value):
+        return []
+    if isinstance(value, list):
+        return _resolve_person_who_care(value, person_index)
+    key = str(value).strip()
+    if not key:
+        return []
+    if key in person_index:
+        return [person_index[key]]
+    if key.isdigit():
+        return [_resolve_person_label(key, person_index)]
+    return [key]
+
+
+def compact_valuable_movable(
+    items: List[Any],
+    person_index: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Step 5 — цінне рухоме майно."""
+    result: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        entry = _pick_nonempty_fields(
+            item,
+            (
+                "objectType",
+                "otherObjectType",
+                "propertyDescr",
+                "manufacturerName",
+                "trademark",
+                "dateUse",
+                "costDateUse",
+                "costDateType",
+                "acqBeforeFD",
+            ),
+        )
+        entry.update(_asset_rights_fields(item, person_index))
+        if entry:
+            result.append(entry)
+    return result
+
+
+def compact_securities(
+    items: List[Any],
+    person_index: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Step 7 — цінні папери."""
+    result: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        entry = _pick_nonempty_fields(
+            item,
+            (
+                "typeProperty",
+                "subTypeProperty1",
+                "otherObjectType",
+                "amount",
+                "cost",
+                "owningDate",
+            ),
+        )
+        entry.update(_resolve_emitent_fields(item))
+        persons = _resolve_step_persons(item.get("persons"), person_index)
+        if persons:
+            entry["persons"] = persons
+        entry.update(_asset_rights_fields(item, person_index))
+        if entry:
+            result.append(entry)
+    return result
+
+
+def compact_share_capital(
+    items: List[Any],
+    person_index: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Step 8 — участь у статутному капіталі (окремо від corporate_rights / крок 9)."""
+    result: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        entry = _pick_nonempty_fields(
+            item,
+            (
+                "name",
+                "en_name",
+                "ua_name",
+                "legalForm",
+                "country",
+                "corporate_rights_company_code",
+                "cost",
+                "cost_percent",
+                "owningDate",
+                "is_transferred",
+            ),
+        )
+        entry.update(_asset_rights_fields(item, person_index))
+        if entry:
+            result.append(entry)
+    return result
+
+
+def compact_intangible_assets(
+    items: List[Any],
+    person_index: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Step 10 — нематеріальні активи."""
+    result: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        entry = _pick_nonempty_fields(
+            item,
+            (
+                "objectType",
+                "otherObjectType",
+                "objectKind",
+                "otherObjectKind",
+                "descriptionObject",
+                "identity",
+                "countObject",
+                "providerName",
+                "owningDate",
+                "costDateOrigin",
+            ),
+        )
+        entry.update(_asset_rights_fields(item, person_index))
+        if entry:
+            result.append(entry)
+    return result
+
+
+def compact_organizations(payload: Any) -> Dict[str, List[Dict[str, Any]]]:
+    """Step 16 — участь у організаціях (`part_org` / `org`)."""
+    out: Dict[str, List[Dict[str, Any]]] = {"part_org": [], "org": []}
+    if not isinstance(payload, dict):
+        return out
+    for key in ("part_org", "org"):
+        for item in as_list(payload.get(key)):
+            if not isinstance(item, dict):
+                continue
+            entry = _pick_nonempty_fields(
+                item,
+                ("objectName", "reestrCode", "objectType", "unitType", "unitName"),
+            )
+            if entry:
+                out[key].append(entry)
+    return out
+
+
+def _dict_keys_tuple(item: Dict[str, Any]) -> tuple[str, ...]:
+    return tuple(item.keys())
+
+
+def _can_pack_strict_array(arr: list) -> bool:
+    if len(arr) < 2 or not all(isinstance(x, dict) for x in arr):
+        return False
+    keyset = _dict_keys_tuple(arr[0])
+    if not keyset:
+        return False
+    return all(_dict_keys_tuple(x) == keyset for x in arr[1:])
+
+
+def pack_arrays_strict(value: Any) -> Any:
+    """Lossless compact v3: uniform dict arrays → {_cols, _rows}; nested values packed too."""
+    if isinstance(value, list):
+        packed_items = [pack_arrays_strict(item) for item in value]
+        if _can_pack_strict_array(packed_items):
+            cols = list(_dict_keys_tuple(packed_items[0]))
+            rows = [[item.get(c) for c in cols] for item in packed_items]
+            return {"_cols": cols, "_rows": rows}
+        return packed_items
+    if isinstance(value, dict):
+        if set(value.keys()) == {"_cols", "_rows"}:
+            return value
+        return {k: pack_arrays_strict(v) for k, v in value.items()}
+    return value
+
+
+def unpack_arrays_strict(value: Any) -> Any:
+    """Inverse of pack_arrays_strict (for tests / round-trip checks)."""
+    if isinstance(value, dict):
+        cols = value.get("_cols")
+        rows = value.get("_rows")
+        if (
+            set(value.keys()) == {"_cols", "_rows"}
+            and isinstance(cols, list)
+            and isinstance(rows, list)
+            and all(isinstance(c, str) for c in cols)
+            and all(isinstance(r, list) for r in rows)
+        ):
+            return [
+                {cols[i]: unpack_arrays_strict(cell) for i, cell in enumerate(row) if i < len(cols)}
+                for row in rows
+            ]
+        return {k: unpack_arrays_strict(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [unpack_arrays_strict(item) for item in value]
+    return value
+
+
+def normalize_compact_format(value: Any) -> str:
+    fmt = str(value or "v2").strip().lower()
+    return "v3" if fmt == "v3" else "v2"
+
+
+def serialize_declaration_payload(
+    compact: Dict[str, Any],
+    *,
+    format: str = "v2",
+    minify: bool = False,
+) -> str:
+    """Serialize compact dict for the LLM prompt only (audit/charts keep the dict)."""
+    fmt = normalize_compact_format(format)
+    use_minify = bool(minify) and fmt == "v3"
+    payload: Any = pack_arrays_strict(compact) if fmt == "v3" else compact
+    if use_minify:
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(payload, ensure_ascii=False)
+
+
 def compact_declaration(
     raw: Dict[str, Any],
     *,
@@ -710,13 +985,18 @@ def compact_declaration(
     family = as_list(data.get("step_2", {}).get("data"))
     realty = as_list(data.get("step_3", {}).get("data"))
     unfinished = as_list(data.get("step_4", {}).get("data"))
+    valuable_movable = as_list(data.get("step_5", {}).get("data"))
     vehicles = as_list(data.get("step_6", {}).get("data"))
+    securities = as_list(data.get("step_7", {}).get("data"))
+    share_capital = as_list(data.get("step_8", {}).get("data"))
     incomes = as_list(data.get("step_11", {}).get("data"))
     cash_assets = as_list(data.get("step_12", {}).get("data"))
     liabilities = as_list(data.get("step_13", {}).get("data"))
     major_changes = as_list(data.get("step_14", {}).get("data"))
     expenses = as_list(data.get("step_15", {}).get("data"))
+    organizations_payload = data.get("step_16", {}).get("data")
     corporate_rights = as_list(data.get("step_9", {}).get("data"))
+    intangible_assets = as_list(data.get("step_10", {}).get("data"))
     financial_institution_items = as_list(data.get("step_17", {}).get("data"))
 
     person_index = _build_person_index(family)
@@ -778,6 +1058,7 @@ def compact_declaration(
         financial_institution_items,
         person_index,
     )
+    organizations = compact_organizations(organizations_payload)
 
     compact: Dict[str, Any] = {
         "meta": {
@@ -887,6 +1168,11 @@ def compact_declaration(
             }
             for item in unfinished
         ],
+        "valuable_movable": compact_valuable_movable(valuable_movable, person_index),
+        "securities": compact_securities(securities, person_index),
+        "share_capital": compact_share_capital(share_capital, person_index),
+        "intangible_assets": compact_intangible_assets(intangible_assets, person_index),
+        "organizations": organizations,
         "liabilities": [
             {
                 "objectType": item.get("objectType"),
@@ -1217,13 +1503,23 @@ def _http_post_chat_stream_with_reasoning(
     return "".join(chunks), raw_events
 
 
+def data_root() -> Path:
+    """Data root for relative paths, deep_research/ and the secrets file.
+
+    webview_app passes it via DECLARATOR_DATA_DIR. Without it (plain CLI from the
+    repo) it's the main.py directory. Never rely on __file__ alone: in the exe,
+    main.py lives in PyInstaller's temp extraction dir, which vanishes on exit."""
+    raw = os.environ.get("DECLARATOR_DATA_DIR", "").strip()
+    return Path(raw).expanduser().resolve() if raw else Path(__file__).resolve().parent
+
+
 def resolve_audit_mode_dir(path_str: str) -> Path:
-    """Relative path — from the main.py directory (project root)."""
+    """Relative path — from the data root (see data_root)."""
     raw = (path_str or "").strip() or "audit"
     p = Path(raw)
     if p.is_absolute():
         return p
-    return Path(__file__).resolve().parent / p
+    return data_root() / p
 
 
 def _audit_case_dir(audit_root: Path, source_file: Path) -> Path:
@@ -1463,8 +1759,7 @@ def iter_json_files(input_dir: Path) -> List[Path]:
     return sorted(input_dir.glob("*.json"))
 
 
-_PROJECT_ROOT = Path(__file__).resolve().parent
-_DEEP_RESEARCH_ROOT = _PROJECT_ROOT / "deep_research"
+_DEEP_RESEARCH_ROOT = data_root() / "deep_research"
 
 
 def is_under_project_deep_research(input_dir: Path) -> bool:
@@ -1511,7 +1806,62 @@ def resolve_openrouter_api_key(cli_value: str = "") -> str:
     return str(cli_value or "").strip()
 
 
+def resolve_jev_api_key(cli_value: str = "") -> str:
+    """CLI -> env -> .declarator_secrets.json -> empty.
+
+    Типовий шлях до Jev — через OpenRouter, тому підходить і ключ OpenRouter;
+    окремий `jev_api_key` потрібен лише для рідного API TypeSafe.
+    """
+    direct = str(cli_value or "").strip()
+    if direct:
+        return direct
+    for env_name in (
+        "DECLARATOR_JEV_API_KEY",
+        "JEV_API_KEY",
+        "DECLARATOR_OPENROUTER_API_KEY",
+        "OPENROUTER_API_KEY",
+    ):
+        from_env = str(os.environ.get(env_name, "") or "").strip()
+        if from_env:
+            return from_env
+    try:
+        secrets_path = data_root() / ".declarator_secrets.json"
+        if secrets_path.is_file():
+            data = json.loads(secrets_path.read_text(encoding="utf-8"))
+            for field in ("jev_api_key", "openrouter_api_key"):
+                value = str(data.get(field, "") or "").strip()
+                if value:
+                    return value
+    except (OSError, json.JSONDecodeError):
+        pass
+    return ""
+
+
+def _jev_question_set(args: argparse.Namespace) -> Dict[str, Any]:
+    """Читає набір питань Jev один раз на прогін і кешує його на args.
+
+    Роль набору — та сама, що в промпту для LLM, тому він і задається файлом,
+    і потрапляє в run_meta під своїм іменем.
+    """
+    cached = getattr(args, "_jev_question_set", None)
+    if isinstance(cached, dict):
+        return cached
+    from jev import client as jev_client
+
+    path = str(getattr(args, "jev_questions", "") or "").strip()
+    if not path:
+        raise RuntimeError("--provider jev потребує --jev-questions <файл.json>")
+    qset = jev_client.load_question_set(path)
+    setattr(args, "_jev_question_set", qset)
+    return qset
+
+
 def run_meta_host(args: argparse.Namespace) -> str:
+    provider = str(getattr(args, "provider", "ollama") or "ollama").lower()
+    if provider == "jev":
+        from jev import client as jev_client
+
+        return str(getattr(args, "jev_url", "") or "") or jev_client.DEFAULT_JEV_URL
     if str(getattr(args, "provider", "ollama") or "ollama").lower() == "openrouter":
         return str(
             getattr(args, "openrouter_host", "")
@@ -1540,6 +1890,11 @@ def openrouter_model_context_length(
 def resolve_effective_model_and_mode(args: argparse.Namespace) -> Tuple[str, str]:
     """Return effective model id and launch mode for current run."""
     provider = str(getattr(args, "provider", "ollama") or "ollama").strip().lower()
+    if provider == "jev":
+        model_id = str(
+            getattr(args, "jev_model", "") or getattr(args, "model", "")
+        ).strip()
+        return model_id or "unknown-model", "jev"
     if provider == "openrouter":
         model_id = str(
             getattr(args, "openrouter_model", "") or getattr(args, "model", "")
@@ -1633,7 +1988,19 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
         raw_data,
         legacy_payload=bool(getattr(args, "compact_legacy_payload", False)),
     )
-    compact_str_full = json.dumps(compact, ensure_ascii=False)
+    compact_fmt = normalize_compact_format(getattr(args, "compact_format", "v2"))
+    want_minify = bool(getattr(args, "compact_minify", False))
+    if want_minify and compact_fmt != "v3":
+        print(
+            "Warning: --compact-minify ignored unless --compact-format v3 "
+            f"({path.name})."
+        )
+        want_minify = False
+    compact_str_full = serialize_declaration_payload(
+        compact,
+        format=compact_fmt,
+        minify=want_minify,
+    )
 
     analysis: Optional[Dict[str, Any]] = None
     last_error: Optional[Exception] = None
@@ -1643,6 +2010,39 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
     audit_case_dir: Optional[Path] = None
     attempt_meta: List[Dict[str, Any]] = []
     file_usage_snaps: List[Dict[str, Any]] = []
+    score_without_findings = False
+    jev_meta: Optional[Dict[str, Any]] = None
+    jev_hint_meta: Optional[Dict[str, Any]] = None
+    jev_hint_text: str = ""
+    provider = str(getattr(args, "provider", "ollama") or "ollama").lower()
+    if bool(getattr(args, "jev_hint", False)) and provider != "jev":
+        # Одна оцінка Jev на файл, поза циклом повторів: підказка не залежить
+        # від обрізання payload, тож рахувати її на кожен retry — зайва плата.
+        from jev import client as jev_client
+        from report_i18n import FINDING_TYPE_UK
+
+        hint_qset = _jev_question_set(args)
+        hint_state_cfg = hint_qset.get("state") or {}
+        hint_state = jev_client.clean_state(
+            compact,
+            strip=hint_state_cfg.get("strip"),
+            drop_empty=bool(hint_state_cfg.get("drop_empty")),
+        )
+        hint_raw = jev_client.call_jev(
+            hint_state,
+            jev_client.questions_payload(hint_qset),
+            model=str(getattr(args, "jev_model", "") or hint_qset.get("model", "")).strip()
+            or jev_client.DEFAULT_JEV_MODEL,
+            url=str(getattr(args, "jev_url", "") or "") or jev_client.DEFAULT_JEV_URL,
+            api_key=str(getattr(args, "jev_api_key", "") or ""),
+            timeout_sec=args.timeout,
+            retries=int(getattr(args, "retries", 2) or 0),
+            retry_delay=float(getattr(args, "retry_delay", 5) or 0),
+        )
+        hint_analysis, jev_hint_meta = jev_client.jev_to_analysis(
+            hint_raw, hint_qset, finding_titles=FINDING_TYPE_UK
+        )
+        jev_hint_text = jev_client.build_hint_text(hint_analysis, jev_hint_meta)
     if audit_cfg.get("enabled"):
         audit_case_dir = _audit_case_dir(audit_cfg["root_dir"], path)
         if audit_cfg.get("raw_declaration"):
@@ -1674,6 +2074,8 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
                 "Шаблон user-промпта пайплайну має містити плейсхолдер {declaration_payload}: "
                 f"{exc}"
             ) from exc
+        if jev_hint_text:
+            user_prompt = f"{jev_hint_text}\n\n{user_prompt}"
 
         if getattr(args, "save_compact_declarations", False) and not audit_cfg.get(
             "enabled"
@@ -1708,7 +2110,72 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
                     encoding="utf-8",
                 )
             provider = str(getattr(args, "provider", "ollama") or "ollama").lower()
-            if provider == "openrouter":
+            if provider == "jev":
+                # Decision-модель: тексту не генерує, тому промпти сюди не йдуть
+                # узагалі — замість них версіонований набір питань. Відповідь
+                # перекладається у форму відповіді LLM, і далі пайплайн працює
+                # як звичайно. Деталі — jev_client.jev_to_analysis().
+                from jev import client as jev_client  # локальний імпорт, щоб не тягнути на інших шляхах
+                from report_i18n import FINDING_TYPE_UK
+
+                qset = _jev_question_set(args)
+                # Похідні відношення рахує код: Jev задокументовано «not a
+                # calculator», і помилки арифметики ростуть із розміром входу.
+                state_cfg = qset.get("state") or {}
+                jev_state = jev_client.clean_state(
+                    compact,
+                    strip=state_cfg.get("strip"),
+                    drop_empty=bool(state_cfg.get("drop_empty")),
+                )
+                if state_cfg.get("derived_ratios"):
+                    jev_state = jev_client.state_with_derived(jev_state)
+                if qset.get("groups"):
+                    jev_raw = jev_client.call_jev_grouped(
+                        compact,
+                        qset,
+                        api_key=str(getattr(args, "jev_api_key", "") or ""),
+                        model=str(getattr(args, "jev_model", "") or qset.get("model", "")).strip()
+                        or jev_client.DEFAULT_JEV_MODEL,
+                        url=str(getattr(args, "jev_url", "") or "") or jev_client.DEFAULT_JEV_URL,
+                        timeout_sec=args.timeout,
+                        retries=int(getattr(args, "retries", 2) or 0),
+                        retry_delay=float(getattr(args, "retry_delay", 5) or 0),
+                        with_derived=bool((qset.get("state") or {}).get("derived_ratios")),
+                    )
+                else:
+                    jev_raw = jev_client.call_jev(
+                    jev_state,
+                    jev_client.questions_payload(qset),
+                    model=str(
+                        getattr(args, "jev_model", "") or qset.get("model", "")
+                    ).strip()
+                    or jev_client.DEFAULT_JEV_MODEL,
+                    url=str(getattr(args, "jev_url", "") or "")
+                    or jev_client.DEFAULT_JEV_URL,
+                    api_key=str(getattr(args, "jev_api_key", "") or ""),
+                    timeout_sec=args.timeout,
+                    retries=int(getattr(args, "retries", 2) or 0),
+                    retry_delay=float(getattr(args, "retry_delay", 5) or 0),
+                )
+                model_result, jev_meta = jev_client.jev_to_analysis(
+                    jev_raw, qset, finding_titles=FINDING_TYPE_UK
+                )
+                if audit_cfg.get("enabled") and audit_case_dir is not None:
+                    if audit_cfg.get("request_payload"):
+                        _write_json_file(
+                            audit_case_dir / f"request_payload.attempt{attempt + 1}.json",
+                            {
+                                "model": qset.get("model"),
+                                "questions": jev_client.questions_payload(qset),
+                                "state": jev_state,
+                            },
+                        )
+                    if audit_cfg.get("response_raw"):
+                        _write_json_file(
+                            audit_case_dir / f"response_raw.attempt{attempt + 1}.json",
+                            jev_raw,
+                        )
+            elif provider == "openrouter":
                 # Alternative (isolated) path: neither Ollama functions nor /api/chat are involved.
                 if bool(getattr(args, "reasoning_debug", False)):
                     print(
@@ -1749,7 +2216,11 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
                     cloud_mode=bool(getattr(args, "cloud_mode", False)),
                     return_debug_trace=bool(audit_cfg.get("enabled")),
                 )
-            if audit_cfg.get("enabled") and isinstance(model_result, dict):
+            if provider == "jev":
+                # jev_to_analysis() уже повернув сам аналіз, без обгортки
+                # {"analysis": ...}, яку роблять LLM-клієнти в audit-режимі.
+                analysis = model_result
+            elif audit_cfg.get("enabled") and isinstance(model_result, dict):
                 analysis = model_result.get("analysis")
                 if audit_case_dir is not None:
                     if audit_cfg.get("request_payload"):
@@ -1770,12 +2241,10 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
             else:
                 analysis = model_result
             if analysis_incomplete_needs_retry(analysis):
-                score = analysis.get("risk_score")
-                raise IncompleteAnalysisError(
-                    f"Порожній findings при risk_score={score} "
-                    f"(>= {FINDINGS_RETRY_MIN_RISK_SCORE}); "
-                    "ймовірно уривок відповіді або fallback reasoning-моделі."
-                )
+                # Модель відповіла, просто не так, як хотілося б правилу — це не мережева
+                # помилка і не привід витрачати ще один платний виклик. Приймаємо відповідь,
+                # позначаємо її в run_meta (score_without_findings), звіт показує решту.
+                score_without_findings = True
             attempt_info["status"] = "ok"
             attempt_info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
             attempt_info["duration_sec"] = round(time.time() - attempt_started, 3)
@@ -1783,6 +2252,30 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
             break
         except Exception as exc:  # noqa: BLE001
             last_error = exc
+            # Збійна спроба цінніша за вдалу: саме на ній видно, чим модель ламає JSON.
+            # Без цього запису аудит фіксує лише те, що вже спрацювало.
+            if (
+                audit_cfg.get("enabled")
+                and audit_cfg.get("response_raw")
+                and audit_case_dir is not None
+                and (
+                    getattr(exc, "raw_content", None) is not None
+                    or getattr(exc, "raw_reasoning", None) is not None
+                )
+            ):
+                _write_json_file(
+                    audit_case_dir / f"response_raw.attempt{attempt + 1}.failed.json",
+                    {
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                        "message_content": getattr(exc, "raw_content", None),
+                        "message_reasoning": getattr(exc, "raw_reasoning", None),
+                        "provider": getattr(exc, "provider", None),
+                        "finish_reason": getattr(exc, "finish_reason", None),
+                        "native_finish_reason": getattr(exc, "native_finish_reason", None),
+                        "usage": getattr(exc, "usage", None),
+                    },
+                )
             attempt_info["status"] = "error"
             attempt_info["error"] = str(exc)
             attempt_info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
@@ -1838,6 +2331,17 @@ def process_file(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
             "host": run_meta_host(args),
             "started_at_utc": args.started_at_utc,
             "prompt_name": prompt_name,
+            "score_without_findings": score_without_findings,
+            **(
+                {"analysis_source": "jev", "jev": jev_meta}
+                if jev_meta is not None
+                else {}
+            ),
+            **(
+                {"jev_hint": jev_hint_meta}
+                if jev_hint_meta is not None
+                else {}
+            ),
         },
         "source_file": path.name,
         "declaration_id": raw_data.get("id"),
@@ -2137,7 +2641,7 @@ def _visual_log_limit(
 
 
 def _effective_max_concurrent_declarations(args: argparse.Namespace) -> int:
-    """Parallelism only for OpenRouter and only with --on-limit skip|fail-run (avoids a race on args.max_chars)."""
+    """Parallelism only for OpenRouter/Jev and only with --on-limit skip|fail-run (avoids a race on args.max_chars)."""
     try:
         raw = int(getattr(args, "max_concurrent_declarations", 1) or 1)
     except (TypeError, ValueError):
@@ -2147,11 +2651,11 @@ def _effective_max_concurrent_declarations(args: argparse.Namespace) -> int:
     if raw > 8:
         raw = 8
     provider = str(getattr(args, "provider", "ollama") or "ollama").lower()
-    if provider != "openrouter":
+    if provider not in ("openrouter", "jev"):
         if raw > 1:
             print(
                 "[INFO] Паралельна обробка декларацій ігнорується "
-                "(доступна лише з --provider=openrouter)."
+                "(доступна лише з --provider=openrouter або --provider=jev)."
             )
         return 1
     if str(getattr(args, "on_limit", "") or "") not in ("skip", "fail-run"):
@@ -2164,6 +2668,105 @@ def _effective_max_concurrent_declarations(args: argparse.Namespace) -> int:
     return raw
 
 
+def process_file_replicated(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
+    """`--replicates N`: N незалежних process_file цієї декларації паралельно,
+    потім зшивання через Jev в один запис (docs/JEV.md §3.4).
+
+    Декларація за декларацією, а не N повних прогонів поспіль: кожна
+    декларація завершена й записана до переходу до наступної, тож resume,
+    «Стоп», переміщення файлів, звіт і досьє працюють без жодної окремої
+    логіки. Одночасних запитів — «Паралель» × N."""
+    n = int(getattr(args, "replicates", 1) or 1)
+    if n <= 1:
+        return process_file(path, args)
+
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        futures = [pool.submit(process_file, path, args) for _ in range(n)]
+    results: List[Dict[str, Any]] = []
+    errors: List[Exception] = []
+    for fut in futures:
+        try:
+            results.append(fut.result())
+        except PayloadLimitExceededError:
+            # Ліміт перевіряється до виклику моделі й однаковий для всіх реплік —
+            # передаємо нагору, там наявна логіка лімітів (skip/ask/auto-raise).
+            raise
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+    if not results:
+        raise errors[0]
+
+    from jev import merge as jev_merge
+
+    labels = [f"r{i + 1}" for i in range(len(results))]
+    if len(results) == 1:
+        merged = dict(results[0])
+        merged["run_meta"] = {**(merged.get("run_meta") or {}),
+                              "merge": {"source_runs": labels, "failed_replicas": len(errors)}}
+        print(f"[WARN] {path.name}: вдалась лише 1 репліка з {n} — записано без зшивання.")
+        return merged
+
+    runs = {label: {path.name: row} for label, row in zip(labels, results)}
+    try:
+        merged, _audit = jev_merge.merge_declaration(
+            path.name, runs, jev_merge.Cache(None), str(getattr(args, "jev_api_key", "") or ""),
+            timeout_sec=int(args.timeout), retries=int(getattr(args, "retries", 2) or 0),
+            retry_delay=float(getattr(args, "retry_delay", 5) or 0),
+            risk_level_fn=lambda s: normalize_risk_level(None, s),
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Аналізи вже оплачені — не викидаємо їх через збій Jev: пишемо одну
+        # репліку й чесно позначаємо, що це не консенсус.
+        merged = dict(results[0])
+        merged["run_meta"] = {**(merged.get("run_meta") or {}),
+                              "merge": {"source_runs": labels[:1], "error": str(exc)[:300]}}
+        print(f"[WARN] {path.name}: зшивання через Jev не вдалось ({exc}) — записано репліку r1.")
+    else:
+        m = merged["run_meta"]["merge"]
+        if errors:
+            m["failed_replicas"] = len(errors)
+        print(
+            f"[INFO] {path.name}: {len(results)}/{n} реплік, "
+            f"{m['n_findings_raw']} знахідок -> {m['n_findings_merged']} після зшивання."
+        )
+    usage = jev_merge.sum_openrouter_usage(results)
+    if usage is not None:
+        merged["openrouter_usage"] = usage
+    merged["processing_duration_sec"] = max(
+        float(r.get("processing_duration_sec") or 0.0) for r in results
+    )
+    return merged
+
+
+def analyze_declaration(path: Path, args: argparse.Namespace) -> Dict[str, Any]:
+    """Аналіз однієї декларації: LLM (з репліками й зшиванням, якщо задано),
+    потім — за --jev-verify — перевірка фактів знахідок через Jev."""
+    result = process_file_replicated(path, args)
+    if not bool(getattr(args, "jev_verify", False)):
+        return result
+    from jev import verify as jev_verify
+
+    try:
+        compact = compact_declaration(json.loads(path.read_text(encoding="utf-8")))
+        meta = jev_verify.annotate_result(
+            result, compact, str(getattr(args, "jev_api_key", "") or ""),
+            timeout_sec=int(args.timeout),
+            retries=int(getattr(args, "retries", 2) or 0),
+            retry_delay=float(getattr(args, "retry_delay", 5) or 0),
+        )
+    except Exception as exc:  # noqa: BLE001 — анотація не має валити оплачений аналіз
+        print(f"[WARN] {path.name}: Jev-перевірка фактів не вдалась ({exc}) — знахідки без позначок.")
+        return result
+    if meta:
+        result.setdefault("run_meta", {})["jev_verify"] = meta
+        if meta["n_not_grounded"]:
+            print(
+                f"[INFO] {path.name}: у {meta['n_not_grounded']} з {meta['n_findings']} знахідок "
+                "факти не збігаються з декларацією (Jev)."
+            )
+    return result
+
+
 def _try_process_file_with_limits(
     file_path: Path,
     args: argparse.Namespace,
@@ -2174,7 +2777,7 @@ def _try_process_file_with_limits(
     _visual_log_processing(file_path, progress_tag, args)
     try:
         try:
-            result = process_file(file_path, args)
+            result = analyze_declaration(file_path, args)
         except PayloadLimitExceededError as limit_exc:
             _pipeline_log(
                 f"{progress_tag} LIMIT_EXCEEDED {file_path.name} "
@@ -2193,7 +2796,7 @@ def _try_process_file_with_limits(
                     f"Auto-raise max_chars {old_max} -> {args.max_chars} "
                     f"for {file_path.name}, retrying."
                 )
-                result = process_file(file_path, args)
+                result = analyze_declaration(file_path, args)
             elif args.on_limit == "skip":
                 _pipeline_log(f"Skipping {file_path.name} due to payload limit.")
                 _visual_log_limit(file_path, progress_tag, limit_exc)
@@ -2226,19 +2829,19 @@ def _try_process_file_with_limits(
                     f"Decision: raise max_chars {old_max} -> {args.max_chars} "
                     f"for {file_path.name}, retrying."
                 )
-                result = process_file(file_path, args)
+                result = analyze_declaration(file_path, args)
         return ("ok", result, None)
     except Exception as exc:  # noqa: BLE001
         return ("error", None, exc)
 
 
 def resolve_compact_declarations_dir(path_str: str) -> Path:
-    """Relative path — from the main.py directory (project root during a normal run)."""
+    """Relative path — from the data root (see data_root)."""
     raw = (path_str or "").strip() or "оброблені декларації/compact"
     p = Path(raw)
     if p.is_absolute():
         return p
-    return Path(__file__).resolve().parent / p
+    return data_root() / p
 
 
 def write_compact_declaration_snapshot(
@@ -2509,13 +3112,31 @@ def build_parser() -> argparse.ArgumentParser:
         "--compact-legacy-payload",
         dest="compact_legacy_payload",
         action="store_true",
-        help="Додати all_nonempty_steps_payload (повна сира копія кроків) поряд із compact v2.",
+        help="Додати all_nonempty_steps_payload (повна сира копія кроків) поряд із compact.",
     )
     parser.add_argument(
         "--no-compact-legacy-payload",
         dest="compact_legacy_payload",
         action="store_false",
-        help="Не додавати all_nonempty_steps_payload (default compact v2).",
+        help="Не додавати all_nonempty_steps_payload (default).",
+    )
+    parser.add_argument(
+        "--compact-format",
+        choices=["v2", "v3"],
+        default="v2",
+        help="Формат payload у промпті: v2 (звичайний JSON) або v3 (STRICT-колонки).",
+    )
+    parser.add_argument(
+        "--compact-minify",
+        dest="compact_minify",
+        action="store_true",
+        help="Minify JSON payload (лише з --compact-format v3).",
+    )
+    parser.add_argument(
+        "--no-compact-minify",
+        dest="compact_minify",
+        action="store_false",
+        help="Не minify-ити payload (default).",
     )
     parser.add_argument(
         "--compact-declarations-dir",
@@ -2538,6 +3159,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.set_defaults(
         save_compact_declarations=False,
         compact_legacy_payload=False,
+        compact_minify=False,
         audit_capture_raw_declaration=False,
         audit_capture_compact_declaration=False,
         audit_capture_request_payload=False,
@@ -2587,8 +3209,69 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--provider",
         default="ollama",
-        choices=["ollama", "openrouter"],
-        help="LLM провайдер: ollama (default) або openrouter (OpenAI-сумісний альтернативний шлях).",
+        choices=["ollama", "openrouter", "jev"],
+        help=(
+            "Провайдер: ollama (default), openrouter (OpenAI-сумісний шлях) "
+            "або jev (decision-модель: замість промптів — набір питань, "
+            "замість тексту — ймовірності)."
+        ),
+    )
+    parser.add_argument(
+        "--jev-questions",
+        default="",
+        help=(
+            "Шлях до набору питань JSON (jev/questions/*.json). "
+            "Обов'язковий при --provider=jev; для Jev це аналог промпту."
+        ),
+    )
+    parser.add_argument(
+        "--jev-model",
+        default="",
+        help="Ідентифікатор decision-моделі; порожнє — береться з набору питань.",
+    )
+    parser.add_argument(
+        "--jev-url",
+        default="",
+        help=(
+            "Повний URL decision-ендпоінта. Порожнє — OpenRouter "
+            "(https://openrouter.ai/api/alpha/decisions). Рідний API TypeSafe "
+            "має інший шлях, тому задається URL цілком, а не хост."
+        ),
+    )
+    parser.add_argument(
+        "--jev-api-key",
+        default="",
+        help="Ключ для decision-ендпоінта. Через OpenRouter підходить ключ OpenRouter.",
+    )
+    parser.add_argument(
+        "--jev-hint",
+        action="store_true",
+        help=(
+            "Jev-підказка (docs/JEV.md §3.3, експериментально): для --provider "
+            "ollama/openrouter спершу рахує Jev за --jev-questions і додає короткий "
+            "текстовий блок з попередньою оцінкою на початок user-промпта. Ловить "
+            "більше справжніх ризиків, але й дає більше хибних тривог."
+        ),
+    )
+    parser.add_argument(
+        "--jev-verify",
+        action="store_true",
+        help=(
+            "Після аналізу — один виклик Jev на декларацію: чи збігаються факти "
+            "кожної знахідки з декларацією (jev/verify.py, docs/JEV.md §3.7). Лише "
+            "анотує знахідки (_jev_grounded/_jev_substantive), висновок LLM не змінює."
+        ),
+    )
+    parser.add_argument(
+        "--replicates",
+        type=int,
+        default=1,
+        help=(
+            "Скільки разів аналізувати КОЖНУ декларацію (1-5). При 2+ прогони "
+            "однієї декларації йдуть паралельно й одразу зшиваються через Jev "
+            "(jev/merge.py, docs/JEV.md §3.4) в один запис; далі все як звичайно "
+            "(resume, переміщення, звіт, досьє). Потребує ключа Jev."
+        ),
     )
     parser.add_argument(
         "--openrouter-host",
@@ -2598,7 +3281,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--openrouter-model",
         default="",
-        help="OpenRouter model id (наприклад meta-llama/llama-3.3-70b-instruct). Використовується лише при --provider=openrouter.",
+        help="OpenRouter model id (наприклад qwen/qwen3-30b-a3b-instruct-2507). Використовується лише при --provider=openrouter.",
     )
     parser.add_argument(
         "--openrouter-api-key",
@@ -2620,7 +3303,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         metavar="N",
         help=(
-            "Скільки декларацій обробляти паралельно (лише --provider=openrouter; "
+            "Скільки декларацій обробляти паралельно (--provider=openrouter або jev; "
             "1 як раніше; макс. 8). Ігнорується для Ollama та при --on-limit ask або auto-raise-32000."
         ),
     )
@@ -2642,6 +3325,71 @@ def main() -> None:
     if str(getattr(args, "provider", "ollama") or "ollama").lower() == "openrouter":
         args.openrouter_api_key = resolve_openrouter_api_key(
             str(getattr(args, "openrouter_api_key", "") or "")
+        )
+    if str(getattr(args, "provider", "ollama") or "ollama").lower() == "jev":
+        args.jev_api_key = resolve_jev_api_key(
+            str(getattr(args, "jev_api_key", "") or "")
+        )
+        # Відсутній ключ чи набір питань — не транзієнтний збій: без швидкого
+        # виходу кожен файл марно проходить повний цикл ретраїв.
+        if not args.jev_api_key:
+            raise SystemExit(
+                "[FATAL] --provider jev: немає ключа. Передайте --jev-api-key, "
+                "виставте OPENROUTER_API_KEY або покладіть `openrouter_api_key` "
+                "у .declarator_secrets.json."
+            )
+        if not str(getattr(args, "jev_questions", "") or "").strip():
+            raise SystemExit(
+                "[FATAL] --provider jev потребує --jev-questions <файл.json> "
+                "(наприклад jev/questions/coreframe-13.json)."
+            )
+        # Набір читається тут, а не при першому файлі: биту схему краще
+        # побачити до старту. Заразом звідси береться модель за замовчуванням,
+        # інакше в run_meta потрапив би дефолт --model (llama3.1).
+        try:
+            _qset = _jev_question_set(args)
+        except Exception as exc:
+            raise SystemExit(f"[FATAL] --jev-questions: {exc}") from exc
+        if not str(getattr(args, "jev_model", "") or "").strip():
+            args.jev_model = str(_qset.get("model", "") or "").strip()
+    if bool(getattr(args, "jev_hint", False)) and str(getattr(args, "provider", "ollama") or "ollama").lower() != "jev":
+        args.jev_api_key = resolve_jev_api_key(str(getattr(args, "jev_api_key", "") or ""))
+        if not args.jev_api_key:
+            raise SystemExit(
+                "[FATAL] --jev-hint: немає ключа. Передайте --jev-api-key, "
+                "виставте OPENROUTER_API_KEY або покладіть `openrouter_api_key` "
+                "у .declarator_secrets.json."
+            )
+        if not str(getattr(args, "jev_questions", "") or "").strip():
+            raise SystemExit(
+                "[FATAL] --jev-hint потребує --jev-questions <файл.json>."
+            )
+        try:
+            _hint_qset = _jev_question_set(args)
+        except Exception as exc:
+            raise SystemExit(f"[FATAL] --jev-questions: {exc}") from exc
+        if not str(getattr(args, "jev_model", "") or "").strip():
+            args.jev_model = str(_hint_qset.get("model", "") or "").strip()
+    if bool(getattr(args, "jev_verify", False)):
+        args.jev_api_key = resolve_jev_api_key(str(getattr(args, "jev_api_key", "") or ""))
+        if not args.jev_api_key:
+            # Лише анотація — без ключа аналіз іде далі, просто без перевірки.
+            print("[WARN] --jev-verify: немає ключа Jev/OpenRouter — перевірку фактів вимкнено.")
+            args.jev_verify = False
+        else:
+            print("[INFO] Jev-перевірка фактів знахідок увімкнена.")
+    args.replicates = max(1, min(5, int(getattr(args, "replicates", 1) or 1)))
+    if args.replicates >= 2:
+        args.jev_api_key = resolve_jev_api_key(str(getattr(args, "jev_api_key", "") or ""))
+        if not args.jev_api_key:
+            raise SystemExit(
+                "[FATAL] --replicates: для зшивання потрібен ключ Jev. Передайте "
+                "--jev-api-key, виставте OPENROUTER_API_KEY або покладіть "
+                "`openrouter_api_key` у .declarator_secrets.json."
+            )
+        print(
+            f"[INFO] Реплікація: кожна декларація аналізується {args.replicates} рази "
+            "паралельно й зшивається через Jev."
         )
     args.run_id = uuid4().hex[:12]
     args.started_at_utc = datetime.now(timezone.utc).isoformat()

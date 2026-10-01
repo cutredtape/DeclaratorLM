@@ -1,573 +1,505 @@
 # DeclaratorLM
 
-### 🔍 Making public declarations actually useful. Because open data deserves better tools.
+📖 **[English version →](README.en.md)**
 
-**What this is.** In Ukraine, officials, MPs, judges, and other public figures file electronic asset declarations with [NAZK](https://public.nazk.gov.ua/public_api) every year — official reports of their wealth, income, and their family's property. These declarations are public. DeclaratorLM takes such a declaration, cleans it, and runs it through AI that looks for signs of corruption: wealth that doesn't match income, assets held by third parties, suspicious patterns. The output is a risk score, concrete findings with evidence, and a link back to the primary source. Built for journalists, anti-corruption researchers, and civic-tech developers who need to triage more declarations than anyone could read by hand. Locally on your own machine, or through cloud models — your choice.
+### 🔍 Робимо публічні декларації дійсно корисними. Бо відкриті дані заслуговують на кращі інструменти.
 
-> 📌 **First, the essentials: scope and the tool's role.**
-> - **The specialization is narrow and deliberate.** The tool is tailored to the **Ukrainian context**: the data format, the way declaration sections are parsed, family-relation resolution, the prompts — all of it is tied to the structure of NAZK's open API. It is not a universal "declarations analyzer" — it works specifically with the NAZK register (Ukraine). To use it on another country's declarations you'd have to adapt it, and the code is open for exactly that.
-> - **It's a powerful analytical tool — but a tool.** DeclaratorLM does the heavy lifting: it cleans, structures, analyzes, builds reports, and shows you **where to look**. The final assessments, conclusions, and decisions stay with a human — as they should (see [Legal and ethical boundaries](#legal-boundaries)).
+**Що це.** В Україні посадовці, депутати, судді та інші публічні особи щороку подають до [НАЗК](https://public.nazk.gov.ua/public_api) електронні декларації — офіційні звіти про свої статки, доходи й майно родини. Ці декларації публічні. DeclaratorLM бере таку декларацію, чистить її й пропускає через штучний інтелект, який шукає ознаки корупції: невідповідність статків доходам, майно на третіх осіб, підозрілі патерни. На виході — risk-score, конкретні знахідки з доказами й посилання на першоджерело. Створено для журналістів, антикорупційних дослідників і розробників civic-tech, яким треба відсіювати більше декларацій, ніж можна прочитати вручну. Локально на вашому комп'ютері або через хмарні моделі — на вибір.
+
+> 📌 **Одразу про головне: сфера застосування та роль інструмента.**
+> - **Спеціалізація вузька і свідома.** Інструмент заточений під **український контекст**: формат даних, розбір кроків декларації, розв'язання родинних зв'язків, промпти — усе прив'язане до структури відкритого API НАЗК. Це не універсальний аналізатор «декларацій узагалі» — він працює саме з реєстром НАЗК (Україна). Під декларації іншої країни його треба адаптувати, і код для цього відкритий.
+> - **Це потужний аналітичний інструмент — але саме інструмент.** DeclaratorLM робить важку роботу: чистить, структурує, аналізує, будує звіти й показує, **куди дивитися**. А остаточні оцінки, висновки й рішення лишаються за людиною — так і має бути (докладніше — [«Правові та етичні межі»](#legal-boundaries)).
 
 <p align="center">
   <img src="docs/Hero.png" alt="DeclaratorLM — AI-powered analysis of public declarations: raw declarations → AI analysis → risk assessment → insights and reports" width="880">
 </p>
 
-<p align="center">
-  📖 <b><a href="README.uk.md">Українська версія / Ukrainian version →</a></b>
-</p>
+---
+
+## 🧨 Проблема
+
+В Україні декларації чиновників публічні й цифрові з 2016 року. Звучить як мрія для контролю за владою. Але на практиці:
+
+- 📈 **Декларацій — мільйони.** Щороку їх подають сотні тисяч людей, і архів лише зростає.
+- 👥 **Тих, хто їх реально читає — сотні.** У кращому разі — тисячі. Журналісти, аналітики, активісти, слідчі. Одна людина фізично не здатна вручну опрацювати десятки сторінок цифр — а таких декларацій мільйони.
+- 🗃️ **Дані «брудні».** API НАЗК віддає кожну декларацію як великий, технічний і незручний для читання JSON: внутрішні коди, службові поля, плейсхолдери `[Конфіденційна інформація]`, посилання на осіб через числові id. Щоб зрозуміти, кому належить квартира, треба вручну зіставляти таблиці.
+
+> **Підсумок:** відкриті дані існують, але значною мірою лежать без діла. Їх важко читати вручну масово, а формат відлякує навіть тих, хто б хотів.
+
+**DeclaratorLM береться за обидві проблеми.** Він *автоматично* чистить технічний JSON до людяної суті **та** передає її штучному інтелекту, який готує першу чернетку аналізу — з очищенням, структуруванням, графіками й готовими звітами.
+
+Працює він **пакетно й автоматично** — завантаження, очищення, аналіз, звіти, — з чергою, паузою та відновленням після переривання. Скільки опрацювати за раз — залежить від ваших ресурсів (моделі, часу, бюджету на хмару), а не від штучних обмежень інструмента. На практиці його наводять на цільову вибірку — орган, регіон, рік — і аналітик проходить її помітно швидше, ніж вручну. Куди дивитися — підказує машина; що з цим робити — вирішує людина.
 
 ---
 
-## 🧨 The problem
+## ⚙️ Як це працює
 
-In Ukraine, officials' asset declarations have been public and digital since 2016. That sounds like a dream for holding power accountable. In practice:
+Один простий конвеєр — від сирого файлу до готового висновку:
 
-- 📈 **There are millions of declarations.** Hundreds of thousands of people file them every year, and the archive only grows.
-- 👥 **Only hundreds of people actually read them.** Thousands at best. Journalists, analysts, activists, investigators. A single person physically cannot hand-process dozens of pages of numbers — and there are millions of such declarations.
-- 🗃️ **The data is "dirty."** The NAZK API returns each declaration as a large, technical, hard-to-read JSON: internal codes, service fields, `[Confidential information]` placeholders, people referenced by numeric ids. Just to figure out who owns an apartment, you have to cross-reference tables by hand.
+**📥 Декларація  →  🧹 Compact v2  →  🤖 Штучний інтелект  →  📊 Звіт**
 
-> **In short:** the open data exists, but much of it goes unused. It's hard to read manually at scale, and the format scares off even the people who would want to.
+| 📥 Декларація | 🧹 Compact v2 | 🤖 Штучний інтелект | 📊 Звіт |
+|---------------|---------------|---------------------|---------|
+| JSON з НАЗК, ~11 000 символів «брудного» тексту | чистий, ~3 000 символів (−74%) — лише суть | шукає ризики, аномалії, підозрілі зв'язки | HTML + CSV, графіки, резюме |
+| *що завантажив чиновник* | *прибрано шум, імена замість id* | *risk-score 0–100, знахідки з доказами* | *фільтри, пошук, посилання на НАЗК* |
 
-**DeclaratorLM takes on both problems.** It *automatically* cleans the technical JSON down to its human-readable essence **and** hands it to an AI that produces a first draft of the analysis — with cleanup, structuring, charts, and finished reports.
-
-It runs **in batches and automatically** — download, cleanup, analysis, reports — with a queue, pause, and resume-after-interruption. How much you get through in one go depends on your resources (models, time, cloud budget), not on artificial limits in the tool. In practice you point it at a focused set — a body, a region, a year — and an analyst gets through it noticeably faster than by hand. The machine suggests where to look; the human decides what to do about it.
-
----
-
-## ⚙️ How it works
-
-One simple pipeline — from a raw file to a finished conclusion:
-
-**📥 Declaration  →  🧹 Compact v2  →  🤖 AI  →  📊 Report**
-
-| 📥 Declaration | 🧹 Compact v2 | 🤖 AI | 📊 Report |
-|----------------|---------------|-------|-----------|
-| JSON from NAZK, ~11,000 chars of "dirty" text | clean, ~3,000 chars (−74%) — essence only | looks for risks, anomalies, hidden links | HTML + CSV, charts, summary |
-| *what the official filed* | *noise removed, names instead of ids* | *risk score 0–100, findings with evidence* | *filters, search, links back to NAZK* |
-
-1. **📥 Download.** You give the program a folder of declarations, or pull them straight from the [NAZK API](https://public.nazk.gov.ua/public_api) by a person's name or ID.
-2. **🧹 Cleanup (compact v2).** The program discards technical noise, decodes internal codes, and turns "owner = person #2" into "spouse: Maria Ivanenko." The declaration becomes **three times shorter**, while its content stays intact (and there's a "Detailed" mode as a safety net — see below).
-3. **🤖 Analysis.** The compacted declaration goes to a model (local or cloud) that compares income against assets and looks for signs of corruption.
-4. **📊 Report.** The result is an interactive HTML table, CSV, and — in dossier mode — year-by-year trend charts.
+1. **📥 Завантаження.** Ви даєте програмі папку з деклараціями або одразу тягнете їх з [API НАЗК](https://public.nazk.gov.ua/public_api) за іменем чи ID особи.
+2. **🧹 Очищення (compact v2).** Програма викидає технічний шум, розшифровує внутрішні коди й перетворює «власник = особа №2» на «дружина: Іваненко Марія». Декларація стає **втричі коротшою**, а весь зміст лишається на місці (а на всяк випадок є режим «+ raw кроки» — про нього нижче).
+3. **🤖 Аналіз.** Стисла декларація йде до моделі (локальної або хмарної), яка порівнює доходи з активами й шукає ознаки корупції.
+4. **📊 Звіт.** Результат — інтерактивна HTML-таблиця, CSV та (у режимі досьє) графіки динаміки по роках.
 
 ---
 
-## 🌐 Porting to other countries
+## 🎯 Що саме аналізується
 
-DeclaratorLM is built for Ukraine's NAZK, but the approach is universal: in almost every country a declaration has the same essence — property, family, income, accounts, business, debts. The main barrier to adaptation is **not the schema, but the data format**: from ready-made JSON to scanned paper.
+Модель не просто «читає текст» — вона зіставляє конкретні речі й шукає конкретні тривожні патерни:
 
-The adapter idea is simple: write one module per country that converts its data into the internal `compact v2` format — and then all the analysis, prompts, and reports work **with no changes at all**.
+| Що порівнюється | На що дивиться штучний інтелект |
+|-----------------|-------------------------------|
+| 💰 **Доходи ↔ активи** | Чи відповідає рівень життя офіційній зарплаті |
+| 🏠 **Нерухомість і земля** | Майно без оцінки вартості, занижена вартість, підозріло дешеві угоди |
+| 🚗 **Транспорт** | Авто преміум-класу, особливо оформлені на інших осіб |
+| 💵 **Готівка й рахунки** | Суми готівки/на рахунках, непропорційні задекларованому доходу |
+| 🏦 **Банки та фінустанови** | Де саме відкриті рахунки, на кого |
+| 🏢 **Корпоративні права** | Бізнес, бенефіціарне володіння, конфлікт інтересів |
+| 👨‍👩‍👧 **Активи родини** | Майно, «переписане» на членів сім'ї чи третіх осіб |
+| 📅 **Істотні зміни** | Багато великих операцій за короткий період, придбання без джерела коштів |
 
-| Country | Data format | Adaptation effort |
-|---------|-------------|:---:|
-| 🇺🇦 Ukraine | JSON via API | ✅ already supported |
-| 🇫🇷 France | XML (open data) | ⭐ low |
-| 🇬🇪 Georgia | HTML / OpenSanctions | ⭐⭐ |
-| 🇲🇩 Moldova | HTML / OpenSanctions | ⭐⭐ |
-| 🇨🇱 Chile | online disclosure | ⭐⭐ |
-| 🇷🇴 Romania | PDF form | ⭐⭐⭐ |
-| 🇺🇸 USA | PDF (OGE 278e) | ⭐⭐⭐ |
-| most countries | scans / not public | 🔴 unsuitable |
+На виході по кожній декларації ви отримуєте:
 
-A detailed breakdown of the most suitable countries, the unsuitable cases, and adaptation paths (including a "bulk" route via OpenSanctions / FollowTheMoney data) is in **[PORTING.md](PORTING.md)**.
+- 🔢 **Risk-score 0–100** та рівень ризику (низький / середній / високий / критичний);
+- 🚩 **Знахідки** — конкретні підозри, кожна з доказами, іменами й сумами;
+- 🧾 **Red flags** та список того, **що потребує ручної перевірки**;
+- ✅ **Узгоджені факти** — що, навпаки, виглядає нормально й чому;
+- 📝 **Фінальний висновок** — коротке резюме людською мовою.
 
----
-
-## 🎯 What exactly gets analyzed
-
-The model doesn't just "read text" — it cross-references concrete things and looks for concrete red flags:
-
-| What's compared | What the AI looks for |
-|-----------------|----------------------|
-| 💰 **Income ↔ assets** | Whether the standard of living matches the official salary |
-| 🏠 **Real estate and land** | Property with no stated value, undervaluation, suspiciously cheap deals |
-| 🚗 **Vehicles** | Premium-class cars, especially registered to other people |
-| 💵 **Cash and accounts** | Cash/account balances disproportionate to declared income |
-| 🏦 **Banks and institutions** | Where accounts are held, and in whose name |
-| 🏢 **Corporate rights** | Business ties, beneficial ownership, conflicts of interest |
-| 👨‍👩‍👧 **Family assets** | Property "signed over" to family members or third parties |
-| 📅 **Significant changes** | Many large transactions in a short period, purchases with no source of funds |
-
-For each declaration you get:
-
-- 🔢 a **risk score 0–100** and a risk level (low / medium / high / critical);
-- 🚩 **findings** — concrete suspicions, each with evidence, names, and amounts;
-- 🧾 **red flags** and a list of **what needs manual verification**;
-- ✅ **agreed facts** — what, conversely, looks normal and why;
-- 📝 a **final assessment** — a short summary in plain language.
-
-> ⚠️ **Important, and not in fine print:**
-> - 🔍 This is "a magnifying glass, not a verdict." The program shows **where to look** — the human always makes the call.
-> - 🕳️ **A low score ≠ "clean."** The model can *miss* what's hidden. A low risk means only "the AI didn't spot anything obvious here," not "this person is definitely honest." False reassurance is as dangerous as false suspicion.
-> - 🧠 **The quality of the result depends directly on the chosen model** (see [Which model to use](#which-model) below). A weak model means weak, sometimes wrong analysis — and that's a limitation of the *model*, not of the data or the tool.
-> - 🚫 The model is explicitly forbidden from inventing facts and must rely only on the declaration's data — but, like any AI, it still gets things wrong sometimes.
+> ⚠️ **Важливо, і не дрібним шрифтом:**
+> - 🔍 Це «збільшувальне скло, а не вирок». Програма показує, **куди дивитися** — рішення завжди робить людина.
+> - 🕳️ **Низький бал ≠ «чисто».** Модель може *не помітити* прихованого. Низький ризик означає лише «тут ШІ не побачив очевидного», а не «людина точно чесна». Хибний спокій — така сама небезпека, як і хибна підозра.
+> - 🧠 **Якість результату напряму залежить від обраної моделі** (див. розділ [«Яку модель брати»](#which-model) нижче). Слабка модель = слабкий, іноді хибний аналіз — і це обмеження *моделі*, а не даних чи самого інструмента.
+> - 🚫 Модель отримує пряму заборону вигадувати факти й повинна спиратися лише на дані декларації — але, як і будь-який ШІ, іноді все одно помиляється.
 
 ---
 
 <a id="legal-boundaries"></a>
 
-## ⚖️ Legal and ethical boundaries
+## ⚖️ Правові та етичні межі
 
-This is the most important section. DeclaratorLM does **not** decide who is corrupt, and it accuses **no one** of anything. It is built as a **demonstrational, analytical tool** and makes no decisions of its own. Here is why that boundary is drawn deliberately — and what it rests on.
+Це найважливіший розділ. DeclaratorLM **не** вирішує, хто корупціонер, і **нікого ні в чому не звинувачує.** Він створений як **демонстраційно-аналітичний інструмент** і не ухвалює жодних рішень. Ось чому ця межа проведена свідомо — і на чому вона стоїть.
 
-> The legal citations below are to Ukrainian law, since that is the jurisdiction of the data (NAZK declarations). The reasoning is what governs how the tool may be used.
+### ✅ Чому аналізувати ці дані — законно
 
-### ✅ Why analyzing this data is legal
+- **Дані вже публічні за законом.** Ст. 47 [Закону України «Про запобігання корупції»](https://zakon.rada.gov.ua/laws/show/1700-18) (№ 1700-VII) прямо встановлює, що Єдиний державний реєстр декларацій є **відкритим**, з цілодобовим доступом, і надається у машиночитаному форматі **саме для повторного використання** (automated processing, reuse). Тобто автоматизований аналіз декларацій — це не обхід, а *передбачений законом сценарій* використання цих даних.
+- **Право на роботу з інформацією.** Ст. 34 [Конституції України](https://zakon.rada.gov.ua/laws/show/254%D0%BA/96-%D0%B2%D1%80) гарантує кожному право **вільно збирати, зберігати, використовувати й поширювати інформацію**.
+- **Приватність поважається — і це вбудовано в код.** Та сама ст. 47 закриває доступ до чутливих полів: РНОКПП, паспорт, місце проживання, дата народження, точне місцезнаходження об'єктів. Самі декларації у відкритому доступі вже **без цих даних**, а етап очищення `compact v2` додатково відкидає рештки службових ідентифікаторів ще до того, як декларація потрапляє до моделі.
 
-- **The data is already public by law.** Article 47 of Ukraine's [Law on Prevention of Corruption](https://zakon.rada.gov.ua/laws/show/1700-18) (No. 1700-VII) explicitly establishes that the Unified State Register of Declarations is **open**, available 24/7, and provided in a machine-readable format **specifically for reuse** (automated processing). In other words, automated analysis of declarations is not a workaround — it's a use case the law itself anticipates.
-- **The right to work with information.** Article 34 of the [Constitution of Ukraine](https://zakon.rada.gov.ua/laws/show/254%D0%BA/96-%D0%B2%D1%80) guarantees everyone the right to **freely collect, store, use, and disseminate information**.
-- **Privacy is respected — and it's baked into the code.** That same Article 47 restricts access to sensitive fields: tax ID number, passport, place of residence, date of birth, the exact location of objects. The public declarations already come **without that data**, and the `compact v2` cleanup step additionally discards leftover service identifiers before the declaration ever reaches the model.
+> 🔁 **Ця відсутність точних даних — палиця з двома кінцями, і чесно назвати обидва:**
+> - ➕ **Плюс (приватність і безпека).** Модель фізично не бачить нічого зайвого. Навіть якщо хмарний провайдер закешує ваш запит — у ньому немає ні адрес, ні паспортів, ні дат народження. Нічого чутливого просто нема чому «витекти».
+> - ➖ **Мінус (перевірюваність).** Без точної адреси чи ідентифікаторів **неможливо автоматично звірити** об'єкт із зовнішніми реєстрами (напр., ту саму квартиру за адресою в Держреєстрі речових прав). Межу проведено на боці приватності — свідомий компроміс закону.
 
-> 🔁 **This absence of precise data is a double-edged sword — and both edges deserve to be named honestly:**
-> - ➕ **The upside (privacy and safety).** The model physically sees nothing sensitive. Even if a cloud provider caches your request, there are no addresses, no passports, no dates of birth in it. There's simply nothing sensitive to "leak."
-> - ➖ **The downside (verifiability).** Without a precise address or identifiers, you **cannot automatically cross-check** an object against external registries (e.g. the same apartment by address in the State Register of Property Rights). The line is drawn on the side of privacy — a deliberate legal trade-off.
+### 🚫 Чому висновок — це НЕ вирок
 
-### 🚫 Why the output is NOT a verdict
+- **Презумпція невинуватості.** Ст. 62 [Конституції України](https://zakon.rada.gov.ua/laws/show/254%D0%BA/96-%D0%B2%D1%80): особа вважається невинуватою, доки її вину не доведено **законним порядком і встановлено обвинувальним вироком суду**. Обвинувачення **не може ґрунтуватися на припущеннях**, а всі сумніви тлумачаться на користь особи. Risk-score програми — це припущення й гіпотеза, а не доведення вини.
+- **Це «оціночне судження», а не факт.** Ст. 30 [Закону України «Про інформацію»](https://zakon.rada.gov.ua/laws/show/2657-12) (№ 2657-XII) розрізняє **фактологічні твердження** й **оціночні судження** — останні не підлягають доведенню правдивості. Знахідки DeclaratorLM за своєю природою є оціночними судженнями та підказками «на що звернути увагу», а не констатацією фактів про чиюсь провину.
+- **Офіційна перевірка — не наша компетенція.** Ст. 50 Закону № 1700-VII покладає **повну перевірку декларацій** (достовірність даних, точність оцінки активів, ознаки незаконного збагачення) виключно на **НАЗК**. Встановлення вини — на суд. Приватний інструмент цього робити не може й не робить — він лише допомагає людині вирішити, які декларації варто передати тим, хто має відповідні повноваження.
 
-- **Presumption of innocence.** Article 62 of the [Constitution of Ukraine](https://zakon.rada.gov.ua/laws/show/254%D0%BA/96-%D0%B2%D1%80): a person is presumed innocent until their guilt is proven **in a lawful manner and established by a court's guilty verdict**. An accusation **cannot be based on assumptions**, and all doubts are resolved in the person's favor. The program's risk score is an assumption and a hypothesis — not proof of guilt.
-- **It's a "value judgment," not a fact.** Article 30 of Ukraine's [Law on Information](https://zakon.rada.gov.ua/laws/show/2657-12) (No. 2657-XII) distinguishes **statements of fact** from **value judgments** — the latter are not subject to proof of their truthfulness. DeclaratorLM's findings are, by their nature, value judgments and "worth-a-look" pointers, not assertions of fact about anyone's guilt.
-- **Official verification is not our competence.** Article 50 of Law No. 1700-VII assigns **the full verification of declarations** (accuracy of the data, correctness of asset valuations, signs of illicit enrichment) exclusively to **NAZK**. Establishing guilt is for the courts. A private tool cannot and does not do this — it merely helps a human decide which declarations are worth passing to those who do have the authority.
+### 🔬 Прозорість як запобіжник
 
-### 🔬 Transparency as the safeguard
+Головна етична гарантія — те, що система **не «чорна скринька».** Кожна знахідка й кожен бал спираються на конкретні дані декларації, з посиланням на першоджерело на public.nazk.gov.ua. А **DEBUG-режим аудиту** зберігає **весь ланцюжок обробки** (сира декларація → compact → запит до моделі → відповідь → нормалізований результат), тож будь-який висновок можна **відтворити й дослідити**, а не приймати на віру. Це протилежність «ШІ сказав — значить винен».
 
-The core ethical guarantee is that the system is **not a "black box."** Every finding and every score rests on concrete data from the declaration, with a link to the primary source on public.nazk.gov.ua. And **DEBUG audit mode** preserves the **entire processing chain** (raw declaration → compact → the request to the model → the response → the normalized result), so any conclusion can be **reproduced and examined** rather than taken on faith. This is the opposite of "the AI said so, therefore guilty."
-
-> 📌 The boundary in one line: **the data is public → analysis is allowed; the output is a hypothesis and a value judgment → it accuses no one; official decisions belong to NAZK and the courts.**
+> 📌 Підсумок межі: **дані публічні → аналізувати можна; висновок — гіпотеза й оціночне судження → нікого не звинувачує; офіційні рішення — за НАЗК і судом.**
 >
-> *This section reflects the project's good-faith legal position, not legal advice. Use of the tool is the user's own responsibility, in compliance with Ukrainian law and the ethical norms of journalism and research.*
+> *Цей розділ відображає добросовісну правову позицію проєкту, а не юридичну консультацію. Використання інструмента — на відповідальність користувача, з дотриманням законодавства України та етичних норм журналістики й досліджень.*
 
 ---
 
-## 🖼️ What it looks like
+## 🖼️ Як це виглядає
 
-**📈 Usage dashboard** — what you see when nothing is running: how many declarations have been processed, the risk-level breakdown, time saved, and the most common finding types:
+**📈 Дашборд використання** — те, що ви бачите, коли нічого не запущено: скільки декларацій оброблено, розподіл за рівнем ризику, заощаджений час, найчастіші типи знахідок:
 
 <p align="center">
-  <img src="docs/screenshots/en/01-dashboard.png" alt="Usage dashboard: aggregate stats across all processed declarations" width="880">
+  <img src="docs/screenshots/01-dashboard.png" alt="Дашборд використання: зведена статистика по всіх оброблених деклараціях" width="880">
 </p>
 
 <table>
 <tr>
 <td width="50%">
 
-**☁️ Cloud provider settings**
-<img src="docs/screenshots/en/02-cloud-mode-settings.png" alt="Cloud mode settings: choose Ollama or OpenRouter, host, model, API key, balance, concurrency">
+**☁️ Налаштування хмарного провайдера**
+<img src="docs/screenshots/02-cloud-mode-settings.png" alt="Налаштування Cloud режиму: вибір Ollama або OpenRouter, host, модель, API-ключ, баланс, паралельність">
 
 </td>
 <td width="50%">
 
-**🗂️ Declaration catalog**
-<img src="docs/screenshots/en/05-file-catalog.png" alt="File catalog of declarations, sortable by declarant, year, position, workplace">
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**🔎 Searching the catalog**
-<img src="docs/screenshots/en/06-file-catalog-search.png" alt="Searching declaration files by declarant name or workplace">
-
-</td>
-<td width="50%">
-
-**📥 Downloading one declaration from NAZK**
-<img src="docs/screenshots/en/03-parse-single-declaration.png" alt="Modal for downloading a single declaration by declaration_id directly from the NAZK API">
+**🗂️ Каталог декларацій**
+<img src="docs/screenshots/05-file-catalog.png" alt="Файловий каталог декларацій із сортуванням за декларантом, роком, посадою, місцем роботи">
 
 </td>
 </tr>
 <tr>
 <td width="50%">
 
-**📦 Bulk-downloading from NAZK**
-<img src="docs/screenshots/en/04-parse-bulk.png" alt="Modal for bulk-downloading declarations by search criteria directly from the NAZK API">
+**🔎 Пошук у каталозі**
+<img src="docs/screenshots/06-file-catalog-search.png" alt="Пошук файлів декларацій за іменем декларанта чи місцем роботи">
 
 </td>
 <td width="50%">
 
-**⏳ Live processing log**
-<img src="docs/screenshots/en/07-live-log-cards-processing.png" alt="Live log as animated cards: declarations in progress and already processed, with risk score">
+**📥 Завантаження однієї декларації з НАЗК**
+<img src="docs/screenshots/03-parse-single-declaration.png" alt="Модальне вікно завантаження однієї декларації за declaration_id напряму з API НАЗК">
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**📦 Пакетне завантаження з НАЗК**
+<img src="docs/screenshots/04-parse-bulk.png" alt="Модальне вікно пакетного завантаження декларацій за критеріями пошуку напряму з API НАЗК">
+
+</td>
+<td width="50%">
+
+**⏳ Живий лог обробки**
+<img src="docs/screenshots/07-live-log-cards-processing.png" alt="Живий лог у вигляді карток: декларації в обробці та вже оброблені з risk-score">
 
 </td>
 </tr>
 </table>
 
 <p align="center">
-  <img src="docs/screenshots/08-live-log-cards-done.png" alt="Completed processing batch: risk score, finding count, cost, tokens per declaration" width="880">
-  <br><sub>✅ A completed batch: risk score, finding count, cost, and tokens per declaration.</sub>
+  <img src="docs/screenshots/08-live-log-cards-done.png" alt="Завершений пакет обробки: risk-score, кількість знахідок, вартість, токени по кожній декларації" width="880">
+  <br><sub>✅ Завершений пакет: risk-score, кількість знахідок, вартість і токени по кожній декларації.</sub>
 </p>
 
-**📊 Interactive HTML report** — filter by risk, position, model; expand the full analysis per declarant; findings with evidence; family-assets overview; a clickable link to the original filing on public.nazk.gov.ua:
+**📊 Інтерактивний HTML-звіт** — фільтри за ризиком, посадою, моделлю; розгортання повного аналізу по кожному декларанту; знахідки з доказами; огляд активів родини; клікабельне посилання на оригінал декларації на public.nazk.gov.ua:
 
 <p align="center">
-  <img src="docs/screenshots/09-html-report-table.png" alt="HTML report: summary table of all processed declarations with filters" width="880">
+  <img src="docs/screenshots/09-html-report-table.png" alt="HTML-звіт: зведена таблиця всіх оброблених декларацій з фільтрами" width="880">
 </p>
 <p align="center">
-  <img src="docs/screenshots/10-html-report-expanded.png" alt="Expanded HTML report row: AI findings, family and assets, facts needing verification, conclusion" width="880">
-  <br><sub>An expanded row: findings with evidence, family assets, what to verify, and the final assessment.</sub>
+  <img src="docs/screenshots/10-html-report-expanded.png" alt="Розгорнутий рядок HTML-звіту: знахідки ШІ, сім'я та активи, факти, що потребують перевірки, висновок" width="880">
+  <br><sub>Розгорнутий рядок: знахідки з доказами, активи родини, що перевірити, і фінальний висновок.</sub>
 </p>
 <p align="center">
-  <img src="docs/screenshots/11-html-report-expanded-2.png" alt="Another example of an expanded HTML report row, with a different risk profile" width="880">
-  <br><sub>Same report, a different declarant — the risk card adapts to the specific findings.</sub>
+  <img src="docs/screenshots/11-html-report-expanded-2.png" alt="Ще один приклад розгорнутого рядка HTML-звіту з іншим профілем ризику" width="880">
+  <br><sub>Той самий звіт, інший декларант — картка ризику підлаштовується під конкретні знахідки.</sub>
 </p>
 
-**🕵️ "Dossier" mode (Deep Research)** — download every declaration a single person ever filed, straight from the API, or pick a local folder of already-downloaded ones:
+**🕵️ Режим «Досьє» (Deep Research)** — довантаження всіх декларацій однієї особи напряму з API або вибір локальної папки з уже завантаженими:
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/en/12-dossier-mode-download.png" alt="The download-from-API tab in dossier mode"></td>
-<td width="50%"><img src="docs/screenshots/13-dossier-mode-select-folder.png" alt="Selecting a deep_research folder with a specific person's declarations for chronological analysis"></td>
+<td width="50%"><img src="docs/screenshots/12-dossier-mode-download.png" alt="Вкладка завантаження декларацій особи з API НАЗК у режимі досьє"></td>
+<td width="50%"><img src="docs/screenshots/13-dossier-mode-select-folder.png" alt="Вибір папки deep_research з деклараціями конкретної особи для хронологічного аналізу"></td>
 </tr>
 </table>
 
-While it's processing, the interface switches to a red accent and shows a live dossier view — the declarant currently being analyzed, with charts that update as results come in:
+Під час самої обробки інтерфейс перемикається на червоний акцент і показує живий вигляд досьє — поточного декларанта та графіки, що оновлюються по мірі надходження результатів:
 
 <p align="center">
-  <img src="docs/screenshots/13b-dossier-live-view.png" alt="Live dossier view during processing: red accent theme, the current declarant, charts updating in real time" width="880">
+  <img src="docs/screenshots/13b-dossier-live-view.png" alt="Живий вигляд режиму досьє під час обробки: червона акцентна тема, поточний декларант, графіки оновлюються в реальному часі" width="880">
 </p>
 
-The result is a report with every declaration that person filed, laid out chronologically:
+Результат — звіт з усіма деклараціями особи в хронології:
 
 <p align="center">
-  <img src="docs/screenshots/14-dossier-report.png" alt="Dossier report: a chronological table of every declaration filed by one person" width="880">
+  <img src="docs/screenshots/14-dossier-report.png" alt="Звіт-досьє: хронологічна таблиця всіх декларацій однієї особи" width="880">
 </p>
 
-...plus year-by-year charts of risk, finances, and assets, and an LLM summary of the whole dossier:
+...і графіками динаміки ризику, фінансів і майна по роках, плюс LLM-резюме всього досьє:
 
 <p align="center">
-  <img src="docs/screenshots/15-dossier-report-charts.png" alt="Dossier charts: risk-score trend, finances (income/assets/debts), and property count by year" width="880">
+  <img src="docs/screenshots/15-dossier-report-charts.png" alt="Графіки досьє: динаміка risk-score, фінансів (дохід/активи/борги) та майна по роках" width="880">
 </p>
 
 ---
 
-## ✨ Features at a glance
+## ✨ Можливості коротко
 
-- 📁 **One declaration or a whole folder** — batch processing, with a queue, pause/cancel, and resume after an interruption (already-processed files aren't re-analyzed).
-- 🔌 **Three paths to AI:**
-  - 🖥️ **local [Ollama](https://ollama.com)** — full privacy, data never leaves your machine;
-  - ☁️ **cloud Ollama** via a token;
-  - 🌐 **[OpenRouter](https://openrouter.ai)** — 100+ models, up to 8 declarations processed concurrently, live token/cost accounting (usually cents per declaration, depending on the model).
-- 🕵️ **Deep Research** — chronological analysis of all of one person's declarations, with charts.
-- 📊 **Ready-made reports** — interactive HTML, CSV, an LLM dossier summary.
-- 📈 **Usage dashboard** — how many were processed, the risk breakdown, the most common findings, an estimate of time saved.
-- 🛠️ **DEBUG mode** — more on this below, including named, savable prompt versions.
-- 🧪 **Benchmark tool** — a separate CLI/TUI for comparing models and prompt versions across a whole corpus (see [below](#benchmarking)).
-- 🖱️ **GUI + CLI** — a friendly app and a full command line for scripting.
-
----
-
-## 🧰 Tech stack
-
-| Layer | Technology |
-|-------|------------|
-| 🪟 GUI | [PyWebView](https://pywebview.flowrl.com/) 5 (Edge Chromium on Windows) |
-| ⚛️ Frontend | React 18 + Vite 5, Geist font |
-| 🐍 Backend | Python 3.10+, almost no external dependencies |
-| 🖥️ LLM local | [Ollama](https://ollama.com) `/api/chat` |
-| 🌐 LLM cloud | [OpenRouter](https://openrouter.ai/docs) (OpenAI-compatible) |
-| 🏛️ Data source | NAZK's open [public API](https://public.nazk.gov.ua/public_api) (`public-api.nazk.gov.ua/v2`) |
-| 📄 Reports | Interactive HTML + CSV, JSONL |
-| 📦 Packaging | PyInstaller (onefile, no console) |
+- 📁 **Одна декларація або ціла папка** — пакетна обробка, черга, пауза/скасування, відновлення після переривання (вже оброблені файли не аналізуються повторно).
+- 🔌 **Три шляхи до штучного інтелекту:**
+  - 🖥️ **локальна [Ollama](https://ollama.com)** — повна приватність, дані не залишають комп'ютер;
+  - ☁️ **хмарна Ollama** за токеном;
+  - 🌐 **[OpenRouter](https://openrouter.ai)** — 100+ моделей, паралельна обробка до 8 декларацій одночасно, живий облік вартості в токенах і доларах (зазвичай — центи за декларацію, залежно від моделі).
+- 🕵️ **Deep Research** — хронологічний аналіз усіх декларацій однієї особи, з графіками.
+- 📊 **Готові звіти** — інтерактивний HTML, CSV, LLM-резюме досьє.
+- 📈 **Дашборд використання** — скільки оброблено, розподіл ризиків, найчастіші знахідки, орієнтовний заощаджений час.
+- 🛠️ **DEBUG-режим** — детальніше нижче, включно з іменованими версіями промпту, які можна зберігати.
+- 🧪 **Інструмент бенчмарку** — окремий CLI/TUI для порівняння моделей і версій промпту на цілому корпусі (див. [нижче](#benchmarking)).
+- ⚖️ **Шари Jev** (OpenRouter) — decision-модель поверх LLM: тріаж каталогу, зшивання кількох прогонів однієї декларації, перевірка фактів у знахідках і зміни між роками в режимі досьє. Докладно — [JEV.md](docs/JEV.md).
+- 🖱️ **GUI + CLI** — зручний застосунок і повноцінний командний рядок для скриптів.
 
 ---
 
-## 🚀 Quick start
+## 🧰 Технологічний стек
 
-> 💻 **Requirements.** Built and tested **on Windows**: the UI uses Edge Chromium (WebView2) via `pywebview` + `pythonnet` (.NET), and some spots call Win32 directly. `pywebview` is nominally cross-platform, but running on macOS/Linux out of the box is **not guaranteed** — it would take code changes. You'll also need: **Python 3.10+**, **Node.js** (once, to build the frontend), and either **[Ollama](https://ollama.com)** for local models or an **[OpenRouter](https://openrouter.ai) key** for the cloud.
+| Шар | Технологія |
+|-----|------------|
+| 🪟 GUI | [PyWebView](https://pywebview.flowrl.com/) 5 (Edge Chromium на Windows) |
+| ⚛️ Frontend | React 18 + Vite 5, шрифт Geist |
+| 🐍 Backend | Python 3.10+, майже без зовнішніх залежностей |
+| 🖥️ LLM локально | [Ollama](https://ollama.com) `/api/chat` |
+| 🌐 LLM хмара | [OpenRouter](https://openrouter.ai/docs) (OpenAI-сумісний) |
+| 🏛️ Джерело даних | Відкритий API [НАЗК](https://public.nazk.gov.ua/public_api) (`public-api.nazk.gov.ua/v2`) |
+| 📄 Звіти | Інтерактивний HTML + CSV, JSONL |
+| 📦 Збірка | PyInstaller (onefile, без консолі) |
+
+---
+
+## 🚀 Швидкий старт
+
+> 💻 **Вимоги до платформи.** Розроблено й протестовано **під Windows**: інтерфейс використовує Edge Chromium (WebView2) через `pywebview` + `pythonnet` (.NET), а деякі місця прямо звертаються до Win32. Формально `pywebview` кросплатформний, але «з коробки» на macOS/Linux запуск **не гарантований** — знадобиться правка коду. Ще потрібні: **Python 3.10+**, **Node.js** (одноразово, щоб зібрати фронтенд), і або **[Ollama](https://ollama.com)** для локальних моделей, або **ключ [OpenRouter](https://openrouter.ai)** для хмари.
 
 ```bash
-# 1. Install Python dependencies
+# 1. Встановити Python-залежності
 python -m pip install -r requirements.txt
 
-# 2. Build the frontend — ONCE, before the first GUI launch (or BUILD_FRONTEND.bat)
+# 2. Зібрати фронтенд — ОДНОРАЗОВО, перед першим запуском GUI (або BUILD_FRONTEND.bat)
 cd declarator-lm && npm install && npm run build && cd ..
 
-# 3. Launch the app (Ukrainian)
+# 3. Запустити застосунок (українською)
 python webview_app.py
 
-#    ...or in English
-python webview_app_en.py      # (or run_en.bat on Windows)
+#    ...або англійською
+python webview_app_en.py
 
-# 4. Or from the command line (no frontend needed) — every declaration in a folder
+# 4. Або з командного рядка (фронтенд не потрібен) — усі декларації з папки
 python main.py --input-dir dataset_declarations --model llama3.1
 
-# 5. Or via OpenRouter (cloud, 100+ models)
+# 5. Або через OpenRouter (хмара, 100+ моделей)
 python main.py --input-dir dataset_declarations \
   --provider openrouter \
-  --openrouter-model meta-llama/llama-3.3-70b-instruct \
+  --openrouter-model qwen/qwen3-30b-a3b-instruct-2507 \
   --openrouter-api-key sk-or-v1-...
 ```
 
-> ℹ️ Step 2 (building the frontend) is only for the GUI and is done once — a fresh clone has no `declarator-lm/dist/` yet. The command-line mode (`main.py`) works without it.
+> ℹ️ Крок 2 (збірка фронтенду) потрібен лише для GUI і робиться один раз — у свіжому клоні теки `declarator-lm/dist/` ще немає. Режим командного рядка (`main.py`) працює й без збірки.
 
-The full command-line reference (`--timeout`, `--retries`, `--max-chars`, `--sort-order`, `--max-concurrent-declarations`, etc.) lives in [STRUCTURE.en.md](STRUCTURE.en.md#2-backend-mainpy).
+Повний список параметрів командного рядка (`--timeout`, `--retries`, `--max-chars`, `--sort-order`, `--max-concurrent-declarations` тощо) — у [STRUCTURE.md](docs/STRUCTURE.md#2-бекенд-mainpy).
 
 ---
 
 <a id="which-model"></a>
 
-## 🧠 Which model to use
+## 🧠 Яку модель брати
 
-This decides almost everything. The same tool with different models produces anything from "genuinely useful" to "complete garbage" — so don't judge the project by a weak model.
+Це вирішує майже все, і це вже не питання смаку: 17 моделей пройшли [бенчмарк](#benchmarking) на 140 деклараціях, з яких 80 перевірено вручну, по три прогони на кожну. Коротка відповідь: **дешева модель середнього розміру, кілька разів**.
 
-> ⚠️ The default `llama3.1` (8B) in the examples is there only **so that it launches at all**. For real declaration analysis it's **too weak** — it confuses numbers and relationships (confirmed in practice). Don't judge by it.
+<p align="center">
+  <img src="benchmark/figures/fig_recall_sd_uk.png" alt="Ефективна повнота ± SD за трьома прогонами для 17 моделей; сірі смуги об'єднують моделі, чиї інтервали перетинаються" width="900">
+</p>
 
-**A rough guide:**
+*Повнота — частка перевірених вручну ознак ризику, яку модель справді назвала, середнє з трьох прогонів ± розкид між ними. Моделі всередині сірої смуги не розрізнити, тож їхній порядок там — шум. Помаранчевим позначено моделі, що зривались на частині декларацій. Решта графіків — у [`benchmark/figures/`](benchmark/figures/).*
 
-| Scenario | Recommendation |
-|----------|----------------|
-| 🖥️ **Local** (private, your own GPU) | Not many home PCs can run a 32B model — and that's fine. A practical floor: **Qwen 3 or newer**, or **Llama 3 or newer**, at **12B parameters or more**, preferably a **fine-tuned checkpoint** rather than the raw original model at the same size — it tends to be more accurate for this task. Smaller models are "just to play around." |
-| 🌐 **Cloud — bulk/batch runs** (cheap, fast, surface-level triage over a large volume) | A budget model is enough here: **GLM-5.2**, or one of the smaller **Qwen 3** family models, both work fine. **MiniMax M3** is very good for what it costs. **Qwen3 Coder 30B A3B Instruct** is a solid pick specifically for fast, surface-level passes over a big batch. |
-| 🌐 **Cloud — dossier / deep analysis** (accuracy matters more than cost) | **Kimi K2.5 / K2(.6)** and the **flagship Qwen** models have been the most consistently accurate in the author's own runs — the top choice for dossier mode, where you're following one person's history across years rather than skimming a batch. |
+| Сценарій | Рекомендація |
+|----------|--------------|
+| 🌐 **Хмара, пакетний тріаж** | **`qwen/qwen3-30b-a3b-instruct-2507`**. Одна з двох моделей, найкращих водночас і за виявленням проблем, і за їх описом. Серед найстабільніших між прогонами, у 78 % знахідок наводить конкретну суму, повний прохід по 140 деклараціях коштує близько **$0.15**. **`mistralai/mistral-small-2603`** — рівноцінна альтернатива за виявленням, але тексти знахідок у неї шаблонніші. |
+| 🔁 **Максимальна повнота** | Поставте **«Реплік» = 3** у налаштуваннях OpenRouter (потрібен Jev): кожну декларацію аналізують тричі, а знахідки зшиваються ([JEV.md](docs/JEV.md)). Різні прогони пропускають *різне*, тож об'єднання додає близько +19 п.п. повноти: **94–97 %** для `qwen3-30b-a3b`, `mistral-small-2603` і `minimax/minimax-m2.5`, без нових хибних тривог на чистих деклараціях. Це все одно дешевше за один прохід найдорожчої моделі. |
+| 🗂️ **Досьє / глибокий аналіз** | **`moonshotai/kimi-k2.5`** — друга модель, що в топі і за виявленням, і за текстом. Повнота та сама, що в `qwen3-30b-a3b` (різниця в межах одного пункту), але вона **у 19 разів дорожча** ($2.85 за 140). Має сенс для історії однієї особи, а не для пакета. |
+| 🖥️ **Локально** (приватно, свій GPU) | Та сама **`qwen3-30b-a3b`**: 30.5 млрд параметрів, з них 3.3 млрд активних на токен, Apache 2.0, близько **20 ГБ відеопам'яті** в 4-біт. Це одна серверна відеокарта, а не кластер. Бенчмарк ганяв модель у повній точності через API, тож конкретну квантовану збірку перевірте самі. Значно менші моделі — лише «побавитися». |
 
-As before, this is the author's personal experience running the tool, not a rigorous benchmark — but you no longer have to take that on faith: see [Benchmarking prompts and models](#benchmarking) below to run the same kind of comparison yourself, on your own corpus and model list.
+**Чого уникати і чому**
 
-The rule of thumb: **weak analysis is almost always a weak model, not a broken tool.** Before drawing conclusions about quality, try a more capable model.
+- ⚠️ Дефолтна `llama3.1` (8B) у прикладах стоїть лише **«щоб взагалі запустилося»** — для реального аналізу вона заслабка.
+- 💸 **Дорожче не означає краще.** Найдорожчі моделі бенчмарку *строго доміновані*: для кожної є дешевша, не гірша за жодним із п'яти критеріїв (повнота, хибні тривоги, вартість, стабільність, биті відповіді) і краща хоча б за одним. Ціни різнились у 140 разів, повнота — менш ніж утричі.
+- 🚫 **Відсіяні одразу:** `openai/gpt-oss-20b` пише дві третини відповідей англійською, а не українською. `meta-llama/llama-3.3-70b-instruct` і `mistralai/mistral-nemo` ставлять одну й ту саму оцінку більш ніж половині декларацій, тож їхній бал нічого не впорядковує.
+- 🎲 **Один прогін мало що доводить.** 38 % результатів «знайшла / не знайшла» змінюються, якщо ту саму модель на тих самих даних запустити ще раз, навіть за `temperature = 0`. Рейтинг тримається на великих розривах (30 п.п.) і розсипається на малих (3 п.п.).
+
+Результати відображають стан моделей на серпень–вересень 2026 року, один промпт і один корпус. Нові моделі виходять постійно, тож перш ніж переходити на іншу, проженіть [бенчмарк](#benchmarking) на власному корпусі. Головне правило лишається: **слабкий аналіз — це майже завжди слабка модель, а не зламаний інструмент.**
 
 ---
 
 <a id="benchmarking"></a>
 
-## 🧪 Benchmarking prompts and models
+## 🧪 Бенчмаркінг промптів і моделей
 
-A separate tool, [`benchmark/`](benchmark/README.md) — it doesn't touch the main app or any of its files; it just reuses `main.py`'s pipeline, `report.py`, and `openrouter_client.py` as a library. Its job: run the **same declaration corpus** through **several model × prompt-version combinations** and lay the results side by side, so the model recommendations above can eventually rest on measurement instead of anecdote.
+Окремий інструмент, [`benchmark/`](benchmark/README.md) — він не чіпає основний застосунок і жоден його файл, а лише перевикористовує пайплайн `main.py`, `report.py` та `openrouter_client.py` як бібліотеку. Його задача: прогнати **той самий корпус декларацій** через **кілька комбінацій модель × версія промпту** і покласти результати поряд — щоб рекомендації моделей вище спирались на вимір, а не на анекдот.
 
-- 🖥️ **CLI + TUI.** Drive it interactively — pick models, prompt versions, and how much of the corpus to use, see a cost estimate, confirm — or run it fully non-interactively for scripting (`--non-interactive`), including a `--dry-run` mode that never calls a model at all (useful for checking the setup for free).
-- 💰 **A cost estimate and a preflight check before anything is spent.** It confirms the host is reachable, the model actually exists, and does one tiny smoke-test call, then estimates the whole run's cost from the local `compact_declaration()` output size and OpenRouter's pricing — and asks for confirmation before spending anything.
-- 📊 **A comparison matrix** (`matrix.csv` / `.json` / `.html`) — one row per model×prompt combination: declarations processed and errors, the risk-score distribution (mean/median/min/max, and the low/medium/high/critical breakdown), average findings per declaration, how often the model returned an empty conclusion, average evidence/rationale length, payload size, run duration, cost in USD, and prompt/completion token totals.
-- 📁 **A full report per cell, not just aggregate numbers.** Each model×prompt combination also gets its own complete report folder (JSONL + CSV + HTML, the same format the main app produces), plus optional audit-style artifacts — so a suspicious number in the matrix can be traced straight down to the declaration that produced it.
-- 🔁 Resumable (`--resume`) if a long run gets interrupted, and its own `.gitignore` keeps the real declaration corpus and every run's output out of git — only the tool and its docs are meant to be shared.
+- 🖥️ **CLI + TUI.** Керуйте інтерактивно — оберіть моделі, версії промпту, обсяг корпусу, побачте оцінку вартості, підтвердіть — або запустіть повністю неінтерактивно для скриптів (`--non-interactive`), включно з режимом `--dry-run`, який жодного разу не викликає модель (зручно безкоштовно перевірити налаштування).
+- 💰 **Оцінка вартості й перевірка перед запуском, перш ніж витрачено хоч щось.** Перевіряє, що хост доступний, модель справді існує, робить один мікроскопічний тестовий виклик, а тоді оцінює вартість усього прогону з розміру виводу локального `compact_declaration()` і цін OpenRouter — і питає підтвердження перед витратою.
+- 📊 **Матриця порівняння** (`matrix.csv` / `.json` / `.html`) — по рядку на кожну комбінацію модель×промпт: кількість оброблених декларацій і помилок, розподіл risk-score (середнє/медіана/мін/макс, і розбивка низький/середній/високий/критичний), середня кількість знахідок на декларацію, як часто модель повертала порожній висновок, середня довжина доказів/обґрунтування, розмір payload, тривалість прогону, вартість у доларах, сумарні токени запиту й відповіді.
+- 📁 **Повний звіт по кожній клітинці, а не лише зведені цифри.** Кожна комбінація модель×промпт отримує власну повноцінну теку звіту (JSONL + CSV + HTML — той самий формат, що видає основний застосунок), плюс опціональні артефакти у стилі режиму аудиту — тож підозрілу цифру в матриці можна простежити аж до конкретної декларації, яка її дала.
+- 🔁 Відновлюваний (`--resume`), якщо довгий прогін перервався.
+- 📉 **Результати прогону 17 моделей** — графіки в [`benchmark/figures/`](benchmark/figures/) (кожен у `_uk` і `_en`): повнота проти хибних тривог і вартості, калібрування важкості, узгодженість моделей, стабільність між прогонами, швидкість.
+- 🔒 Власний `.gitignore` тримає поза git корпус і виводи прогонів. **У спільний доступ ідуть лише інструмент і графіки результатів**, тож свіжий клон отримує харнес і порожній `corpus/`.
 
-See [`benchmark/README.md`](benchmark/README.md) for installation and exact commands.
-
----
-
-## 🧹 How the cleanup works (compact v2)
-
-A raw NAZK declaration is ~11,000 characters of technical JSON. Here's what the program does to it **before showing it to the AI:**
-
-1. 👤 **Decodes the people.** Builds a "who's who" table (the subject, spouse, children) and replaces raw `rightBelongs: "2"` with readable "spouse: Maria Ivanenko."
-2. 📂 **Sorts it onto shelves.** Turns 13 of the 18 declaration sections into clean structured blocks: family, real estate, vehicles, income, cash, liabilities, corporate rights, **banks and accounts**, and more.
-3. 🧮 **Computes totals** — total income, cash, property and vehicle value, liabilities.
-4. 🗑️ **Strips the noise** — internal ids, service codes, empty placeholders.
-
-> 📎 **Why "13 of 18" and not all 18.** Not every section is structured. But the rest is **not "lost"** and isn't unreadable to the model. Those 5 sections (securities, share capital participation, intangible assets, etc.) are **genuinely rare** in real declarations — there simply weren't enough examples to build a dedicated structure for them. When they do appear, they're passed to the model as a **cleaned-up raw fragment** (the AI reads it fine), not discarded. So: 13 common sections are neatly shelved, 5 rare ones are passed "as-is, but clean." Nothing disappears.
-
-> 🎚️ **A safety net, just in case.** Settings have an **"Economical / Detailed"** toggle (with a "?" hint right next to it that spells this out). The default is "Economical": clean compact, fast and cheap. If it ever seems the model "missed" something, switch to **"Detailed"** — and the **full raw copy** of every filled step is attached alongside the compact form, exactly as in the register's original JSON: the model sees every field and every original wording. Across all the (long) testing this was never needed — but the option is always at hand.
-
-The result is a compact, readable JSON where **the declaration's content is preserved and the technical junk is gone.** A detailed step-by-step breakdown is in [raw-compact.md](raw-compact.md) (Ukrainian).
+Інсталяція та точні команди — у [`benchmark/README.md`](benchmark/README.md).
 
 ---
 
-## 🛠️ DEBUG mode
+## 🧹 Як влаштоване очищення (compact v2)
 
-Behind the outward simplicity hides a full workshop for those who want to look "under the hood" — developers, researchers, anyone tuning prompts or checking analysis quality.
+Сира декларація НАЗК — це ~11 тис. символів технічного JSON. Ось що з нею робить програма, **перш ніж показати штучному інтелекту:**
 
-### How to enable it
+1. 👤 **Розшифровує людей.** Будує таблицю «хто є хто» (суб'єкт, дружина/чоловік, діти) і замінює сирі `rightBelongs: "2"` на зрозуміле «дружина: Іваненко Марія Петрівна».
+2. 📂 **Розкладає по поличках.** Усі **18 розділів** форми (кроки 0–17) перетворює на іменовані секції: родина, нерухомість, транспорт, цінне рухоме, цінні папери, участь у капіталі, корпоративні права, нематеріальні активи, доходи, готівка, зобов'язання, організації, **банки та рахунки** тощо.
+3. 🧮 **Рахує підсумки** — сумарний дохід, готівку, вартість майна й транспорту, зобов'язання.
+4. 🗑️ **Прибирає шум** — внутрішні id, службові коди, порожні плейсхолдери.
 
-> 🔑 **Shift + four quick clicks on the «Д» logo** (top-left corner of the window) within 2 seconds.
+> 📎 **`raw_extras` — запобіжник, не «дірка».** На типовому корпусі НАЗК він порожній: усе вже в іменованих секціях. Ключ з'являється лише якщо у JSON трапиться крок поза 0–17. Повний розбір секцій — у [raw-compact.md](docs/raw-compact.md).
 
-No restart needed — a **"DEBUG settings"** block appears in the sidebar immediately, and a `Debug` badge shows up in the header.
+> 🎚️ **Глибина й формат.** У розширених налаштуваннях дві осі: **глибина** («Лише компакт» / «+ raw кроки») і **формат** (Compact v2 / експериментальний v3 з колонковою упаковкою). За замовчуванням — v2 + лише компакт. «+ raw» додає повну сиру копію заповнених кроків; v3 не змінює семантику секцій, лише рядок для LLM.
 
-### What's inside
+Підсумок — компактний, читабельний JSON, де **зміст декларації збережено, а технічне сміття прибране.** Детальний покроковий розбір — у [raw-compact.md](docs/raw-compact.md).
 
-| 🧩 Tool | What it does |
-|---------|-------------|
-| ✏️ **Prompt editor** | Edit the system and user prompts (and the dossier prompt) right in the app — changes apply to the current session only, the project code is untouched. You're no longer limited to a single draft: save as many named versions as you want per session, switch between them, rename or delete a saved one, and the version currently active shows as a badge in the header. There's still a "Reset to built-in" button for going back to `core`. |
-| 🔬 **Audit mode** | Saves the full processing chain for each declaration into its own folder: raw declaration → compact → the request payload to the model → the raw response → the parsed JSON → the normalized analysis → attempt metadata. **Seven separate toggles** — capture only what you need. Indispensable for understanding *why* the model decided the way it did. |
-| ⚖️ **Model comparison** | Runs **one** declaration through 2–4 different models and shows the results side by side — to see which model is more accurate. (For comparing models *and* prompt versions across a whole corpus rather than one declaration, see [Benchmarking prompts and models](#benchmarking) below.) |
-| 📄 **Dossier summary** | Without the full pipeline: the model reads a finished HTML report and appends a text summary to it. |
-| 🔄 **Regenerate HTML + CSV** | Rebuilds the report from an existing JSONL without re-analyzing. |
-| 📟 **System load** | Shows CPU / RAM / GPU while running. |
-| 🧽 **Wipe usage traces** | One click clears all local results, reports, and temporary files. |
+---
+
+## 🛠️ DEBUG-режим
+
+За зовнішньою простотою ховається повноцінна майстерня для тих, хто хоче зазирнути «під капот» — розробників, дослідників, тих, хто налаштовує промпти чи перевіряє якість аналізу.
+
+### Як увімкнути
+
+> 🔑 **Shift + чотири швидких кліки на логотипі «Д»** (лівий верхній кут вікна) протягом 2 секунд.
+
+Перезапуск не потрібен — у бічній панелі одразу з'являється додатковий блок **«DEBUG налаштування»**, а в шапці — позначка `Debug`.
+
+### Що всередині
+
+| 🧩 Інструмент | Що робить |
+|---------------|-----------|
+| ✏️ **Редактор промптів** | Правте системний і користувацький промпти, промпт досьє й обидва набори питань Jev прямо в застосунку — зміни діють лише на поточну сесію, код проєкту не чіпається. Тепер це не один чернетковий текст: у межах сесії можна зберегти скільки завгодно **іменованих версій**, перемикатися між ними, перейменовувати чи видаляти збережену версію, а активна версія показується бейджем у шапці. Кнопка «Скинути до вбудованих» лишилась — повертає до вбудованих: `core-2` (аналіз), `delta-1` (досьє), `coreframe-13` і `pairframe-3` (Jev). |
+| 🔬 **Режим аудиту** | Зберігає по кожній декларації повний ланцюжок обробки в окрему папку: сира декларація → compact → payload запиту до моделі → сира відповідь → розпарсений JSON → нормалізований аналіз → метадані спроб. **Сім окремих перемикачів** — вмикаєте лише те, що потрібно. Незамінне, щоб зрозуміти, *чому* модель вирішила саме так. |
+| ⚖️ **Порівняння моделей** | Проганяє **одну** декларацію через 2–4 різні моделі й показує результати поряд — щоб побачити, яка модель точніша. (Щоб порівняти моделі *й* версії промпту на цілому корпусі, а не одній декларації, — див. [«Бенчмаркінг промптів і моделей»](#benchmarking) нижче.) |
+| 📄 **Підсумок досьє** | Без повного пайплайну: модель читає готовий HTML-звіт і дописує в нього текстове резюме. |
+| 🔄 **Перегенерувати HTML + CSV** | Перебудовує звіт зі старого JSONL без повторного аналізу. |
+| 📟 **Навантаження системи** | Показує CPU / RAM / GPU під час роботи. |
+| 🧽 **Видалити сліди використання** | Одним кліком чистить усі локальні результати, звіти й тимчасові файли. |
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/en/16-debug-audit-mode.png" alt="Audit mode: toggles for saving the raw declaration, compact form, request payload, raw/parsed response, normalized analysis"></td>
-<td width="50%"><img src="docs/screenshots/17-debug-prompt-editor.png" alt="Prompt editor: the pipeline's system and user prompt templates, editable for the current session without touching code"></td>
+<td width="50%"><img src="docs/screenshots/16-debug-audit-mode.png" alt="Режим аудиту: перемикачі збереження raw-декларації, compact, payload запиту, сирої/розпарсеної відповіді, нормалізованого аналізу"></td>
+<td width="50%"><img src="docs/screenshots/17-debug-prompt-editor.png" alt="Редактор промптів: system і user шаблон пайплайну аналізу редагуються на поточну сесію без зміни коду"></td>
 </tr>
 <tr>
-<td width="50%"><sub>🔬 Audit mode — seven toggles for exactly what to save per declaration.</sub></td>
-<td width="50%"><sub>✏️ Prompt editor — the system and user templates, session-scoped.</sub></td>
+<td width="50%"><sub>🔬 Режим аудиту — сім перемикачів, що саме зберігати по кожній декларації.</sub></td>
+<td width="50%"><sub>✏️ Редактор промптів — системний і користувацький шаблони, на сесію.</sub></td>
 </tr>
 </table>
 
-Whichever prompt version was active for a given run is recorded alongside the result and shows up as its own "Prompt" column in the report table (and in each row's detail panel) — so if a batch mixed runs made under `core` and a saved variant, you can still tell which analysis came from which prompt.
+Яка версія промпту була активна для конкретного прогону — записується разом із результатом і показується окремою колонкою «Промпт» у таблиці звіту (і в деталях кожного рядка). Тож якщо в одному пакеті змішались прогони під `core-2` і під збереженим варіантом, у звіті все одно видно, який аналіз зроблено яким промптом.
 
 ---
 
-## 🏛️ Deep Research and the NAZK API
+## 🏛️ Deep Research та НАЗК API
 
-Ukrainian declarations have been public since 2016, and access is provided by the **open API of the [National Agency on Corruption Prevention](https://public.nazk.gov.ua/public_api)** (`public-api.nazk.gov.ua/v2` — no key, no authentication). DeclaratorLM can:
+Декларації в Україні публічні з 2016 року, і доступ до них дає **відкритий API [Національного агентства з питань запобігання корупції](https://public.nazk.gov.ua/public_api)** (`public-api.nazk.gov.ua/v2` — без ключа й авторизації). DeclaratorLM вміє:
 
-- 📄 download a **single** declaration by its `declaration_id`;
-- 🕵️ download **every** declaration filed by one person, by `user_declarant_id` — this is "Deep Research" mode: you can see how assets and risk changed over the years;
-- 📦 bulk-download declarations **for a given year** (with filters) to build your own research corpus.
+- 📄 завантажити **одну** декларацію за її `declaration_id`;
+- 🕵️ завантажити **всі** декларації конкретної особи за `user_declarant_id` — це і є режим «Deep Research»: видно, як мінялись активи й ризик з роками;
+- 📦 завантажити пакет декларацій **за рік** (з фільтрами) для власного дослідницького корпусу.
 
-> 🌍 **Testing the original intent from outside Ukraine?** The NAZK API is a Ukrainian government service, and it may be unreachable or unreliable from some countries' networks. If downloading declarations fails or times out, try connecting through a Ukrainian VPN before assuming something in the tool is broken.
+> 🧭 **Звідки беруться ID — і чому їх не треба шукати вручну.**
+> - `declaration_id` (для «завантажити одну») — це просто кінець адреси декларації на сайті НАЗК: `https://public.nazk.gov.ua/documents/XXXXXXXX` → оте `XXXXXXXX`.
+> - `user_declarant_id` (для режиму досьє) **на сайті НАЗК не показується** — і його не треба вишукувати. Типовий сценарій самодостатній: ви завантажуєте пакет декларацій з API (напр., за рік), аналізуєте їх, а коли якась виглядає підозріло за ризиком і фактами — розгортаєте в її картці блок **«Технічні деталі»**, де й лежить `user_declarant_id`. Далі вмикаєте режим досьє за цим ID — і отримуєте всю історію цієї особи по роках. Тобто інструмент сам «підказує», чиє досьє варто зібрати.
 
-> 🧭 **Where the IDs come from — and why you don't hunt for them by hand.**
-> - `declaration_id` (for "download one") is simply the end of a declaration's address on the NAZK site: `https://public.nazk.gov.ua/documents/XXXXXXXX` → that `XXXXXXXX`.
-> - `user_declarant_id` (for dossier mode) is **not shown on the NAZK site** — and you don't need to dig for it. The typical flow is self-contained: you download a batch of declarations from the API (e.g. for a given year), analyze them, and when one looks suspicious by risk and facts, you expand the **"Technical details"** block in its card, where the `user_declarant_id` sits. Then you switch on dossier mode with that ID and get that person's full year-by-year history. In other words, the tool itself points you to whose dossier is worth assembling.
-
-🔗 Every processed declaration in the report links back to its original filing on **[public.nazk.gov.ua](https://public.nazk.gov.ua/)** — so an AI conclusion can always be checked against the primary source.
+🔗 Кожна оброблена декларація у звіті посилається на її оригінал на **[public.nazk.gov.ua](https://public.nazk.gov.ua/)** — щоб висновок ШІ завжди можна було звірити з першоджерелом.
 
 ---
 
-## 🌍 Multi-language support (UA / EN)
+## 🌍 Мультимовність (UA / EN)
 
-The app ships with Ukrainian and English interfaces. The language is chosen **at launch**:
+Застосунок має українську та англійську версії інтерфейсу. Мова обирається **при запуску**:
 
 ```bash
-python webview_app.py       # Ukrainian
-python webview_app_en.py    # English
+python webview_app.py       # українською
+python webview_app_en.py    # англійською
 ```
 
-Under the hood it's one React app with two entry points. The model's analysis and the declarations themselves stay in their original language — only the app's interface is translated.
-
-> ⚠️ **The English translation is not complete — here's exactly what's missing, and how you could take this further than English.** Three separate things are going on:
-> 1. **The app window (UI shell) — partially covered, actively improving.** Translation works by matching Ukrainian strings against a dictionary: `declarator-lm/src/i18n/enCatalog.js` (plus `enCatalogExtras.js`, a growing second catalog file) holds exact Ukrainian → English pairs, normalized for whitespace/apostrophe variants; `domTranslate.js` walks the DOM (with a `MutationObserver` for anything added later, like log cards), matching leaf text nodes, whole-element text for simple containers, and translatable attributes (`title`/`aria-label`/`placeholder`/`alt`). Rich-text content that's just too long/free-form to dictionary-match (like the help modals) instead gets a hand-written English counterpart in `declarator-lm/src/i18n/modalsEn.jsx`, swapped in by `App.jsx` directly. `App.jsx` itself is still hardcoded Ukrainian and never calls `useI18n`/`useT`. So any Ukrainian string with no catalog entry yet still silently stays in Ukrainian in the English build — the mechanism has gotten more capable, but coverage is still a moving target.
-> 2. **The generated HTML report — the bigger gap.** `report_table.html` (the actual analysis output you get at the end) is **Ukrainian-only, full stop, with no other-language mode at all right now.** `report_i18n.py` only has `*_UK` dictionaries (finding types, risk levels, profile field labels), and `report.py`, `dossier_charts_html.py`, and `dossier_html_summary.py` all have their table headers, section titles, filter placeholders, and chart labels hardcoded in Ukrainian directly in the Python — e.g. `"ПІБ декларанта"`, `"Посада / установа"`, `"Знахідки AI"`, `"Індикатори ризику"`. None of it reads the app's current UI language.
-> 3. **The language-switching mechanism itself is wired for exactly one alternate language, not language-agnostic.** `webview_app.py`'s `_ui_lang()` only special-cases `"en"` — anything else falls through to Ukrainian; `_frontend_index_path()` only knows to look for `dist/index.en.html`; `vite.config.js`'s `rollupOptions.input` hardcodes exactly two entries (`main`, `en`). Adding a third UI language means extending these, not just adding a bigger dictionary.
->
-> **This isn't only about finishing English.** If you'd rather see the app fully in French, Spanish, German, or anything else, the same architecture applies — you'd just be building a new language pack instead of extending the English one. Here are two ready-to-use prompts for an AI coding assistant (like Claude Code) working in this repo — written generically, so swap in whichever language you actually want:
->
-> <details>
-> <summary><strong>Prompt: add or finish a UI translation for a target language</strong></summary>
->
-> ```text
-> I want the DeclaratorLM UI shell available in <TARGET LANGUAGE> (e.g. French,
-> Spanish, German — pick one). Two cases, handle whichever applies:
->
-> (a) English already has a partial translation — study
->     declarator-lm/src/i18n/enCatalog.js, enCatalogExtras.js, domTranslate.js,
->     and modalsEn.jsx to understand the pattern (dictionary matching with
->     normalization for simple strings, a MutationObserver-driven DOM walker
->     for elements/attributes, hand-written English components for long
->     rich-text content that can't be dictionary-matched), then replicate the
->     same pattern for <TARGET LANGUAGE>: a new <lang>Catalog.js (+
->     <lang>CatalogExtras.js if it grows large) and a new modals<Lang>.jsx.
->
-> (b) No translation exists yet for <TARGET LANGUAGE> — build the same pattern
->     from scratch, reusing domTranslate.js's matching logic (it's already
->     language-agnostic; it just needs a catalog to match against).
->
-> Either way, also wire up the entry points, which currently only know about
-> "en": add a new Vite build entry in declarator-lm/vite.config.js
-> (rollupOptions.input), a new declarator-lm/index.<lang>.html, and a new
-> declarator-lm/src/main.<lang>.jsx (mirror main.en.jsx: wrap <App/> in
-> <I18nProvider locale="<lang>">, call installDomTranslator). On the Python
-> side, generalize webview_app.py's _ui_lang() (currently only recognizes
-> "en" via DECLARATOR_UI_LANG/DECLARATOR_LANG/--lang, else falls back to
-> Ukrainian) and _frontend_index_path() (currently only looks for
-> dist/index.en.html) to handle an arbitrary language code, not just "en".
->
-> Then audit every user-facing string in App.jsx, DossierPanel.jsx,
-> DossierCharts.jsx, UsageDashboard.jsx, and VisualLogPanel.jsx against your
-> new catalog, launch the app with the new language selected, exercise every
-> screen and modal (including DEBUG mode, unlocked via Shift + four clicks on
-> the logo), and report any strings that can't be caught this way because
-> they're generated too dynamically for the DOM walker to match.
-> ```
->
-> </details>
->
-> <details>
-> <summary><strong>Prompt: translate the generated HTML report</strong></summary>
->
-> ```text
-> The generated report_table.html (built by report.py, with
-> dossier_charts_html.py and dossier_html_summary.py appending charts and an
-> LLM summary) is entirely hardcoded in Ukrainian and has no other-language
-> mode. Make the output language configurable rather than hardcoding a
-> "protected" default: mirror report_i18n.py's FINDING_TYPE_UK / RISK_LEVEL_UK
-> / SEVERITY_UK / PROFILE_FIELD_UK dictionaries with equivalents for whichever
-> language(s) you want (English first is reasonable, but design it so adding
-> a second or third language later is just another dictionary, not a rewrite),
-> thread a language parameter through report.py's HTML-building functions
-> (write_filterable_html and friends) so every hardcoded string in the
-> template — table headers, filter placeholders, section titles like
-> "Знахідки AI" / "Потребує перевірки" / "Висновок" — resolves per language,
-> and do the same for the hardcoded chart titles/legends in
-> dossier_charts_html.py (e.g. "Індикатори ризику", "Фінанси (грн)", "Дохід",
-> "Активи", "Борги") and the summary prompt language in dossier_html_summary.py.
-> Wire the language choice to the same signal webview_app.py resolves for the
-> UI. Don't treat the Ukrainian strings as a fixed default that must be
-> preserved byte-for-byte — if this is a fork, the upstream repo already has
-> the original Ukrainian behavior; feel free to make whichever language you
-> need the actual default for your copy.
-> ```
->
-> </details>
+Технічно це один React-застосунок із двома точками входу. Аналіз моделі й самі декларації лишаються мовою оригіналу — перекладається лише інтерфейс програми.
 
 ---
 
-## 📂 Project structure
+## 🌐 Порт на інші країни
 
-| File / folder | Purpose |
-|---------------|---------|
-| 🐍 `main.py` | Core: cleanup (compact v2), LLM calls, pipeline, CLI |
-| 🪟 `webview_app.py` | App server (UA), bridge to `main.py` |
-| 🌐 `webview_app_en.py` | The same server in English |
-| ☁️ `openrouter_client.py` | Cloud-model client (OpenRouter) |
-| 🏛️ `deep_research_bridge.py` | Downloading declarations from the NAZK API |
-| 📊 `report.py` | HTML + CSV report generation |
-| 📈 `dossier_charts*.py` | Trend charts for dossier mode |
-| 📝 `dossier_html_summary.py` | LLM dossier summary + model comparison |
-| 📟 `usage_dashboard.py` | Usage statistics |
-| ⚛️ `declarator-lm/` | React frontend |
-| 🔌 `nazk_parser/` | Open NAZK API client |
-| 🧪 `tools/` | Analysis/validation scripts |
-| 🖼️ `docs/screenshots/` | Screenshots for the docs |
+DeclaratorLM заточений під НАЗК, але сам підхід універсальний: майже в кожній країні декларація має ту саму суть — майно, родина, доходи, рахунки, бізнес, борги. Головний бар'єр адаптації — **не схема, а формат даних**: від готового JSON до сканованих папірців.
 
-The full, detailed architecture — every API method and data format — is in **[STRUCTURE.en.md](STRUCTURE.en.md)**.
+Ідея адаптера проста: написати для країни один модуль, що перетворює її дані на внутрішній формат `compact v2`, — і тоді весь аналіз, промпти та звіти працюють **без жодної зміни**.
+
+| Країна | Формат даних | Складність адаптації |
+|--------|--------------|:---:|
+| 🇺🇦 Україна | JSON через API | ✅ вже підтримується |
+| 🇫🇷 Франція | XML (open data) | ⭐ низька |
+| 🇬🇪 Грузія | HTML / OpenSanctions | ⭐⭐ |
+| 🇲🇩 Молдова | HTML / OpenSanctions | ⭐⭐ |
+| 🇨🇱 Чилі | онлайн-розкриття | ⭐⭐ |
+| 🇷🇴 Румунія | PDF-бланк | ⭐⭐⭐ |
+| 🇺🇸 США | PDF (OGE 278e) | ⭐⭐⭐ |
+| більшість країн | скани / непублічно | 🔴 непридатно |
+
+Детальний розбір найпридатніших країн, непридатних кейсів і шляхів адаптації (зокрема «оптом» через дані OpenSanctions / FollowTheMoney) — у **[PORTING.md](docs/PORTING.md)** (англійською).
+
+---
+
+## 📂 Структура проєкту
+
+| Файл / тека | Призначення |
+|-------------|-------------|
+| 🐍 `main.py` | Ядро: очищення (compact v2), виклик LLM, пайплайн, CLI |
+| 🪟 `webview_app.py` | Сервер застосунку (UA), місток до `main.py` |
+| 🌐 `webview_app_en.py` | Той самий сервер англійською |
+| ☁️ `openrouter_client.py` | Клієнт хмарних моделей (OpenRouter) |
+| 🏛️ `deep_research_bridge.py` | Завантаження декларацій з API НАЗК |
+| 📊 `report.py` | Генерація HTML + CSV звітів |
+| 📈 `dossier/` | Режим досьє: графіки динаміки, зміни між роками, LLM-резюме досьє |
+| ⚖️ `jev/` | Шари decision-моделі Jev: тріаж каталогу, зшивання реплік, перевірка фактів, зміни між роками в досьє — див. [JEV.md](docs/JEV.md) |
+| 📟 `usage_dashboard.py` | Статистика використання |
+| ⚛️ `declarator-lm/` | React-фронтенд |
+| 🔌 `nazk_parser/` | Клієнт відкритого API НАЗК |
+| 🧪 `benchmark/` | Автономний вимірювальний контур (матриця модель × промпт) і графіки результатів |
+| 📚 `docs/` | Архітектура (STRUCTURE), Jev, порт на інші країни, нотатки про compact-формат, скріншоти |
+
+Під час роботи exe усе, що він пише (налаштування, ключі, декларації, звіти, кеші), складає в одну теку `DeclaratorLM-data/` поруч із собою — див. [STRUCTURE.md §10.1](docs/STRUCTURE.md#101-тека-даних-runtime).
+
+Повний детальний опис архітектури, усіх методів API та форматів даних — у **[STRUCTURE.md](docs/STRUCTURE.md)**.
 
 ---
 
 <a id="privacy"></a>
 
-## 🔒 Privacy and local data
+## 🔒 Приватність і локальні дані
 
-- 🖥️ With **local Ollama**, declarations and results never leave your machine.
-- ☁️ With **cloud providers**, declaration content is sent to an external API under your key — don't use the cloud for sensitive corpora without understanding that provider's data policy.
-- 🙈 Local data (downloaded declarations, results, settings, keys) is intentionally excluded from git — see [`.gitignore`](.gitignore).
-- ⚖️ NAZK declarations are public by law — using them here is not a personal-data leak, it's exactly what the open register exists for.
-
----
-
-## 🗺️ Roadmap
-
-### ✅ Done
-- Compact v2 cleanup: −74% characters, structuring of 13/18 sections including banks
-- Three providers: local Ollama, Cloud Ollama, OpenRouter (up to 8 threads)
-- Deep Research: chronological analysis of all of a person's declarations, with charts
-- Dossier summary + 2–4 model comparison
-- Usage dashboard
-- Audit mode: saving every processing artifact
-- Resume after an interruption
-- Full prompt control from the UI (session-scoped, multiple named versions, recorded in reports)
-- A standalone benchmark tool (CLI + TUI) for comparing models and prompt versions on one corpus
-- Ukrainian and English interfaces
-
-### 🧭 Deliberately deferred
-- **A reproducible risk-score rubric.** Right now the 0–100 score is the AI's holistic judgment from the text prompt, not a fixed point system for specific patterns (for example: "right to use a premium-class vehicle owned by a third party → +30", "cash/account balances disproportionate to declared income → +10", and so on). So the same input can score differently across models or runs — the score is currently a qualitative judgment, not strictly reproducible. Writing down explicit, checkable scoring rules is a deliberately postponed piece of work.
-
-### 🔮 Potential next steps
-- **A proper multi-model benchmark.** The tooling now exists ([Benchmarking prompts and models](#benchmarking)) — what's missing is actually running it at scale across models and publishing the results. Until then, the model recommendations in [Which model to use](#which-model) stay personal experience, not a measured comparison.
-- Structuring the rare sections 5, 7, 8, 10, 16
-- Vector search / comparison of declarations across people
-- Integration with other registries (State Land Cadastre, Unified State Register) for cross-checking
-- A web version / REST API
+- 🖥️ З **локальною Ollama** декларації й результати ніколи не залишають ваш комп'ютер.
+- ☁️ З **хмарними провайдерами** вміст декларації надсилається зовнішньому API за вашим ключем — не використовуйте хмару для чутливих корпусів без розуміння політики провайдера щодо даних.
+- 🙈 Локальні дані (завантажені декларації, результати, налаштування, ключі) навмисно виключені з git — див. [`.gitignore`](.gitignore).
+- ⚖️ Декларації НАЗК публічні за законом — це не витік персональних даних, а саме те, для чого відкритий реєстр і існує.
 
 ---
 
-## 👤 Status, license, author
+## 🗺️ Дорожня карта
+
+### ✅ Реалізовано
+- Очищення compact v2: −74% символів, структурування **усіх 18** розділів форми (0–17); v3 — опційна колонкова серіалізація для LLM
+- Три провайдери: локальна Ollama, Cloud Ollama, OpenRouter (до 8 потоків)
+- Deep Research: хронологічний аналіз усіх декларацій особи, з графіками
+- Резюме досьє; порівняння 2–4 моделей на одній декларації
+- Дашборд використання
+- Режим аудиту: збереження всіх артефактів обробки
+- Відновлення після переривання
+- Повний контроль промптів із UI (на сесію, кілька іменованих версій, фіксується у звітах)
+- Окремий інструмент бенчмарку (CLI + TUI) для порівняння моделей і версій промпту на одному корпусі
+- Проведене багатомодельне оцінювання, а не лише інструментарій: 17 моделей на фіксованому корпусі зі 140 декларацій із вручну розміченими кейсами, по три прогони кожної моделі, щоб відділити різницю від шуму, — графіки в [`benchmark/figures/`](benchmark/figures/)
+- Українська та англійська версії інтерфейсу
+
+### 🧭 Свідомо відкладено
+- **Відтворювана шкала risk-score.** Наразі 0–100 — це цілісна оцінка штучного інтелекту за текстовим промптом, без фіксованої бальної шкали за конкретні патерни (наприклад: «право користування автомобілем преміум-класу, що належить сторонній особі → +30 балів», «готівка/рахунки, непропорційні задекларованому доходу → +10 балів» тощо). Тому той самий вхід може отримати різний бал у різних моделях чи прогонах — оцінка наразі якісна, не строго відтворювана. Прописати явні, перевірювані правила нарахування балів — свідомо відкладена робота.
+
+### 🔮 Потенційний розвиток
+- **Оприлюднення даних бенчмарку.** Графіки опубліковано; корпус і розмітка — ні. Це декларації справжніх людей, тож залити їх у репозиторій як є не можна. Відкрита задача — визначити, що саме можна оприлюднити, а не сам вимір.
+- Векторний пошук/порівняння декларацій між особами
+- Інтеграція з іншими реєстрами (ДЗК, ЄДР) для крос-перевірки
+- Веб-версія / REST API
+
+---
+
+## 👤 Статус, ліцензія, автор
 
 <p align="center">
-  <img src="docs/screenshots/18-about-modal.png" alt="The in-app 'About DeclaratorLM' window — a short note on the project's goal and its author" width="620">
+  <img src="docs/screenshots/18-about-modal.png" alt="Вікно «Про ДеклараторLM» усередині застосунку — коротко про мету проєкту й автора" width="620">
 </p>
 
-The app is at a **beta** stage (v0.90): functional, with active refinement and testing. The source is open under the **[Apache 2.0](LICENSE)** license — free to use, modify, and distribute, including adapting it for other countries (see [PORTING.md](PORTING.md)), provided you keep the copyright notice and the license text. © 2026 Oleksandr Matviienko.
+Застосунок — на стадії **бета-версії** (v0.95): функціонал робочий, тривають доопрацювання й тестування. Код відкритий під ліцензією **[Apache 2.0](LICENSE)** — його можна вільно використовувати, змінювати й поширювати, зокрема адаптувати під інші країни (див. [PORTING.md](docs/PORTING.md)), за умови збереження копірайту й тексту ліцензії.
 
-> 💬 *"Built for journalists, analysts, and researchers. And for everyone who believes open data should work, not just sit there."*
+> 💬 *«Зроблено для журналістів, аналітиків і дослідників. І для всіх, хто вірить, що відкриті дані мають працювати, а не просто лежати.»*
 
-Built by Oleksandr Matviienko. Contact: [ctrlredtape@gmail.com](mailto:ctrlredtape@gmail.com).
+Зроблено Олександром Матвієнко. Зворотний зв'язок: [ctrlredtape@gmail.com](mailto:ctrlredtape@gmail.com).

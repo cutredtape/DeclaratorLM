@@ -13,6 +13,7 @@ import {
   analyzedIndices,
   chartValue,
   fmtAxis,
+  isMissingValue,
   fmtMoney,
   niceMax,
   xLabelIndices,
@@ -130,10 +131,35 @@ function extendChart(ctrl, k, records) {
 
   ctrl.sctrl.forEach((sc) => {
     const max = sc.s.axis === "right" ? ctrl.rightMax : ctrl.leftMax;
-    const pts = indices.map((ri) => {
-      const r = records[ri];
-      return [xAt(ri, records.length), yAt(chartValue(r, sc.s.key), max)];
-    });
+    // skipNull: точки без значення пропускаються, а не падають у нуль
+    // (перша декларація досьє не має «зміни між роками»).
+    const pts = indices
+      .filter((ri) => !(sc.s.skipNull && isMissingValue(records[ri], sc.s.key)))
+      .map((ri) => [xAt(ri, records.length), yAt(chartValue(records[ri], sc.s.key), max)]);
+    if (!pts.length) return;
+    if (sc.s.stem) {
+      // Подія, а не рівень: вертикальний стовпчик на кожен перехід між роками.
+      // Лінія через такі точки читалась як «кардіограма» замість сплесків.
+      const base = (DOSSIER_PADT + DOSSIER_PLOTH).toFixed(1);
+      sc.line.setAttribute(
+        "d",
+        pts.map((p) => `M${p[0].toFixed(1)} ${base} L${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" "),
+      );
+      sc.line.setAttribute("stroke-width", "4");
+      sc.line.setAttribute("stroke-opacity", "0.75");
+      sc.line.style.strokeDasharray = "";
+      sc.line.style.strokeDashoffset = "";
+      for (let i = sc.dots.length; i < pts.length; i += 1) {
+        const dot = document.createElementNS(NS, "circle");
+        dot.setAttribute("cx", String(pts[i][0]));
+        dot.setAttribute("cy", String(pts[i][1]));
+        dot.setAttribute("r", "3");
+        dot.setAttribute("fill", sc.s.color);
+        sc.g.appendChild(dot);
+        sc.dots.push(dot);
+      }
+      return;
+    }
     const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
     if (sc.s.area && pts.length) {
       sc.area.setAttribute(
@@ -189,8 +215,9 @@ function enableHover(ctrl, records, tooltipEl, { moneySuffix = "грн", countSu
     const rows = ctrl.cfg.series
       .map((s) => {
         const v = chartValue(rec, s.key);
-        const disp =
-          ctrl.cfg.fmt === "money"
+        const disp = s.skipNull && isMissingValue(rec, s.key)
+          ? "—"
+          : ctrl.cfg.fmt === "money"
             ? `${fmtMoney(v, moneyLabels)} ${moneySuffix}`
             : `${v}${ctrl.cfg.fmt === "count" ? countSuffix : ""}`;
         return `<div class="dossier-tt-row"><span class="dossier-tt-left"><span class="dossier-tt-sw" style="background:${s.color}"></span>${s.name}</span><span class="dossier-tt-val">${disp}</span></div>`;
@@ -265,9 +292,19 @@ export default function DossierCharts({ records, visibleCount, isRunning }) {
   const [tooltipMounted, setTooltipMounted] = useState(false);
   const moneyLabels =
     locale === "en" ? { million: "M", thousand: "k" } : { million: t("млн"), thousand: t("тис") };
+  // Без даних змін між роками (не OpenRouter, Jev не рахувався) серії немає
+  // зовсім — а не порожній пункт легенди.
+  const hasChange = (records || []).some((r) => !isMissingValue(r, "change"));
   const charts = useMemo(
-    () => DOSSIER_CHARTS.map((cfg) => localizeChartConfig(cfg, t, moneyLabels)),
-    [t, moneyLabels],
+    () =>
+      DOSSIER_CHARTS.map((cfg) =>
+        localizeChartConfig(
+          { ...cfg, series: cfg.series.filter((s) => hasChange || s.key !== "change") },
+          t,
+          moneyLabels,
+        ),
+      ),
+    [t, moneyLabels, hasChange],
   );
   const hoverOpts = useMemo(
     () => ({

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import UsageDashboard from "./UsageDashboard";
 import VisualLogPanel from "./VisualLogPanel";
 import DossierPanel, { DossierProgressStrip, dossierProgressMeta } from "./DossierPanel";
-import { useI18n } from "./i18n";
+import { createT, useI18n } from "./i18n";
 import {
   AboutProgramBodyEn,
   CloudHelpBodyEn,
@@ -16,7 +16,10 @@ import {
 import "./index.css";
 
 /** Version shown in the header and in "About the program". */
-const APP_UI_VERSION = "v0.90";
+const APP_UI_VERSION = "v0.95";
+
+/** Ukrainian t() for module-level helpers called without a component's translator. */
+const UK_T = createT("uk");
 
 /** Header taglines (random pick on startup, if enabled in "About the program"). */
 const HEADER_TAGLINES = [
@@ -134,10 +137,10 @@ function formatCloudHeaderModelShort(model) {
 }
 
 /** Full name for the tooltip (provider + model id). */
-function formatCloudHeaderModelFull(provider, model) {
+function formatCloudHeaderModelFull(provider, model, t = UK_T) {
   const m = String(model || "").trim();
   const tag = provider === "openrouter" ? "openrouter" : "ollama";
-  if (!m) return `${tag}: (не вказано)`;
+  if (!m) return `${tag}: ${t("(не вказано)")}`;
   return `${tag}: ${m}`;
 }
 
@@ -152,48 +155,48 @@ const DEEP_DOWNLOAD_PROGRESS_RE = /^DEEP_DOWNLOAD_PROGRESS\|(.+)$/;
 const NAZK_DOWNLOAD_PROGRESS_RE = /^NAZK_DOWNLOAD_PROGRESS\|(.+)$/;
 const LOG_VIEW_MODE_KEY = "dlmLogViewMode";
 
-function formatNazkDownloadProgress(p) {
-  if (!p) return "Запит до API НАЗК…";
+function formatNazkDownloadProgress(p, t = UK_T) {
+  if (!p) return t("Запит до API НАЗК…");
   const phase = String(p.phase || "");
   const target = Number(p.target) || 0;
   const saved = Number(p.saved) || 0;
   const skipped = Number(p.skipped) || 0;
   const page = Number(p.page) || 0;
-  if (phase === "start") return "Підключення до API НАЗК…";
+  if (phase === "start") return t("Підключення до API НАЗК…");
   if (phase === "list") {
-    return page > 0 ? `Отримання списку (стор. ${page})…` : "Запит до API НАЗК…";
+    return page > 0 ? t("Отримання списку (стор. {page})…", { page }) : t("Запит до API НАЗК…");
   }
   if (phase === "done") {
-    let s = `Готово: збережено ${saved}`;
-    if (target > 0) s += ` з ${target}`;
-    if (skipped > 0) s += `, пропущено ${skipped}`;
+    let s = t("Готово: збережено {saved}", { saved });
+    if (target > 0) s += t(" з {target}", { target });
+    if (skipped > 0) s += t(", пропущено {skipped}", { skipped });
     return s;
   }
   if (target > 0) {
-    let s = `Збережено ${saved} з ${target}`;
-    if (skipped > 0) s += ` · пропущено ${skipped}`;
-    if (page > 0) s += ` · стор. ${page}`;
+    let s = t("Збережено {saved} з {target}", { saved, target });
+    if (skipped > 0) s += t(" · пропущено {skipped}", { skipped });
+    if (page > 0) s += t(" · стор. {page}", { page });
     return s;
   }
-  return "Завантаження декларацій…";
+  return t("Завантаження декларацій…");
 }
 
-function formatDeepDownloadProgress(p) {
-  if (!p) return "Завантаження з API НАЗК…";
+function formatDeepDownloadProgress(p, t = UK_T) {
+  if (!p) return t("Завантаження з API НАЗК…");
   const phase = String(p.phase || "");
-  if (phase === "start") return "Підключення до API НАЗК…";
+  if (phase === "start") return t("Підключення до API НАЗК…");
   const found = Number(p.found) || 0;
   const downloaded = Number(p.downloaded) || 0;
   const skipped = Number(p.skipped) || 0;
   if (phase === "done") {
-    let s = `Готово: знайдено ${found}, завантажено ${downloaded}`;
-    if (skipped > 0) s += `, вже на диску ${skipped}`;
+    let s = t("Готово: знайдено {found}, завантажено {downloaded}", { found, downloaded });
+    if (skipped > 0) s += t(", вже на диску {skipped}", { skipped });
     return s;
   }
-  let hint = `Знайдено: ${found} · Завантажено: ${downloaded}`;
-  if (skipped > 0) hint += ` · вже на диску: ${skipped}`;
+  let hint = t("Знайдено: {found} · Завантажено: {downloaded}", { found, downloaded });
+  if (skipped > 0) hint += t(" · вже на диску: {skipped}", { skipped });
   const page = Number(p.page) || 0;
-  if (page > 0) hint += ` · стор. ${page}`;
+  if (page > 0) hint += t(" · стор. {page}", { page });
   return hint;
 }
 
@@ -240,22 +243,6 @@ function pruneFileNamesToAvailable(selection, availableFiles) {
   return (selection || []).filter((n) => names.has(n));
 }
 
-function formatVisualLogCopy(entries) {
-  return entries
-    .map((e) => {
-      if (e.status === "OK") {
-        return `[OK] ${e.name || e.source_file} score=${e.score ?? "—"} ${e.source_file}`;
-      }
-      if (e.status === "ERR") {
-        return `[ERR] ${e.source_file}: ${e.error || "помилка"}`;
-      }
-      if (e.status === "LIMIT_EXCEEDED") {
-        return `[LIMIT] ${e.source_file}`;
-      }
-      return `[${e.status || "?"}] ${e.source_file}`;
-    })
-    .join("\n");
-}
 const SIDEBAR_TOOLTIPS = {
   inputDir: "Папка, з якої беруться декларації для обробки.",
   processedDir: "Сюди переносяться успішно оброблені JSON (крім deep research).",
@@ -280,15 +267,27 @@ const SIDEBAR_TOOLTIPS = {
     "Показує THINK_EVENT у картках візуального логу та додає [THINK] у текстовий лог під час пайплайну.",
   pipelineMaxConcurrent:
     "Скільки декларацій одночасно обробляти через OpenRouter (1 = послідовно, до 8). Локальна Ollama та Ollama Cloud ігнорують це. Вища паралельність підвищує швидкість, але також ризик 429/лімітів API, вартість і навантаження.",
+  mergeReplicateCount:
+    "Скільки разів аналізувати кожну декларацію незалежно; Jev зводить прогони в один результат. N× вартість. 1 = вимкнено.",
   outputJsonl: "Куди зберігати результати аналізу у форматі JSONL.",
   errorsJsonl: "Куди зберігати помилки аналізу у форматі JSONL.",
   summaryCsv: "CSV із коротким зведенням по деклараціях.",
   findingsCsv: "CSV із переліком знайдених ризиків/фактів.",
   tableHtml: "Інтерактивна HTML-таблиця з результатами аналізу.",
   compactEconomical:
-    "Компактизація: лише стисла структура — менше токенів і швидший аналіз (за замовчуванням).",
+    "Глибина: лише компактна структура — менше токенів (за замовчуванням).",
   compactDetailed:
-    "Компактизація: до стислої структури додаються сирі кроки JSON — повніше, але дорожче за токенами.",
+    "Глибина: до компакту додається повна сира копія заповнених кроків — повніше, але дорожче.",
+  compactFormatV2:
+    "Формат payload: звичайний JSON-секції compact v2 (за замовчуванням).",
+  compactFormatV3:
+    "Формат payload: compact v3 — колонкова STRICT-переупаковка однотипних масивів. Менше токенів; модель може гірше читати. Експериментально.",
+  compactMinify:
+    "Прибрати пробіли в JSON payload (лише з compact v3). Низький ризик, трохи менше токенів.",
+  jevHintEnabled:
+    "LLM отримує попередню оцінку Jev перед аналізом. Ловить більше реальних ризиків, але й дає більше хибних тривог. Експериментально.",
+  jevVerifyEnabled:
+    "Jev звіряє суми, дати й власників у кожній знахідці з декларацією та позначає ті, де вони не збігаються. Лише OpenRouter, ~$0.0003 на декларацію.",
   auditModeEnabled:
     "Debug-only режим: зберігає артефакти пайплайну у case-папки в каталозі аудиту.",
   auditModeDir: "Кореневий каталог для артефактів режиму аудиту.",
@@ -339,14 +338,14 @@ const LOGO_DEBUG_UNLOCK_TAPS = 4;
 const LOGO_DEBUG_UNLOCK_WINDOW_MS = 2000;
 const AUTOSAVE_INDICATOR_FADE_MS = 1000;
 /** Fallback list when OpenRouter /models is unavailable or returns empty. */
+// Порядок — за результатами бенчмарку 17 моделей (README, «Яку модель брати»).
 const OPENROUTER_FALLBACK_MODELS = [
-  "meta-llama/llama-3.3-70b-instruct",
-  "meta-llama/llama-3.1-8b-instruct",
-  "openai/gpt-4o-mini",
-  "openai/gpt-4o",
-  "anthropic/claude-3.5-haiku",
-  "google/gemini-2.0-flash-001",
-  "qwen/qwen3-32b",
+  "qwen/qwen3-30b-a3b-instruct-2507",
+  "mistralai/mistral-small-2603",
+  "minimax/minimax-m2.5",
+  "moonshotai/kimi-k2.5",
+  "qwen/qwen3.5-35b-a3b",
+  "z-ai/glm-5.2",
 ];
 
 /** Word after count n for «N declarations» (Ukrainian plural forms). */
@@ -887,52 +886,60 @@ function CompactModeHelpModal({ onClose }) {
           <h3 className="compact-mode-help-h3">Що таке компактизація</h3>
           <p>
             Перед аналізом програма проганяє декларацію через <strong>компактизацію</strong> —
-            перетворює сирий JSON на стислу, впорядковану структуру, зрозумілу і людині, і моделі.
-            На цьому етапі програма:
+            перетворює сирий JSON на стислу, впорядковану структуру. На цьому етапі програма:
           </p>
           <ul className="welcome-help-list">
-            <li>залишає лише змістовні розділи: профіль, доходи, нерухомість, транспорт, готівку, корпоративні права, сім’ю, зобов’язання, суттєві зміни;</li>
-            <li>рахує підсумки (загальний дохід, готівка, вартість авто/нерухомості) і складає їх у блок <code className="deep-research-code">quick_totals</code>;</li>
-            <li>розшифровує коди: тип і період декларації, зв’язки власників майна, членів сім’ї, банківські установи;</li>
-            <li>прибирає порожні кроки, технічне «сміття» та конфіденційні заглушки.</li>
+            <li>залишає змістовні розділи кроків 0–17: профіль, сім’ю, нерухомість, транспорт, цінне рухоме, цінні папери, капітал, корпоративні права, нематеріальні активи, доходи, готівку, зобов’язання, суттєві зміни, витрати, організації, банки;</li>
+            <li>рахує підсумки в <code className="deep-research-code">quick_totals</code>;</li>
+            <li>розшифровує коди: тип і період декларації, власників, членів сім’ї;</li>
+            <li>прибирає порожні кроки, технічне сміття та конфіденційні заглушки.</li>
           </ul>
           <p>
-            Результат — компактний JSON, який і надсилається моделі як вхідні дані для пошуку
-            ризиків.             Перемикач у розширених налаштуваннях керує тим, <strong>скільки сирих даних</strong>{" "}
-            додавати до цієї стислої структури.
+            У розширених налаштуваннях дві незалежні осі: <strong>формат</strong> (як упакувати
+            компакт для LLM) і <strong>глибина</strong> (чи додавати сирі кроки). Покриття кроків —
+            завжди частина compact v2; v3 лише змінює серіалізацію.
           </p>
 
           <h3 className="compact-mode-help-h3">
-            <span className="compact-mode-help-dot compact-mode-help-dot--green" aria-hidden /> Економніше
+            <span className="compact-mode-help-dot compact-mode-help-dot--green" aria-hidden /> Формат: Compact v2
             <span className="compact-mode-help-tag">за замовчуванням</span>
           </h3>
           <p>
-            Надсилає лише <strong>компактну структуру</strong> + банківські установи. Рідкісні
-            нестандартні кроки додаються коротко (без повної сирої копії).
+            Звичний JSON із іменованими секціями. Найкраще читається моделлю. Рекомендований старт.
           </p>
-          <ul className="welcome-help-list">
-            <li>Найменший запит → найшвидше та найдешевше за токенами.</li>
-            <li>Достатньо для типових щорічних декларацій.</li>
-            <li>Оптимально для масової обробки десятків файлів поспіль.</li>
-          </ul>
 
           <h3 className="compact-mode-help-h3">
-            <span className="compact-mode-help-dot compact-mode-help-dot--blue" aria-hidden /> Детальніше
+            <span className="compact-mode-help-dot compact-mode-help-dot--amber" aria-hidden /> Формат: Compact v3
+            <span className="compact-mode-help-tag">експерим.</span>
           </h3>
           <p>
-            До компактної структури <strong>додається повна сира копія</strong> всіх заповнених
-            кроків декларації — так, як вони є в оригінальному JSON реєстру.
+            Ті самі значення, але однотипні масиви пакуються в{" "}
+            <code className="deep-research-code">{"{_cols, _rows}"}</code> — назви полів один раз.
+            Менше токенів; ризик, що модель гірше розбере структуру. Опція{" "}
+            <strong>Minify JSON</strong> прибирає пробіли (лише з v3).
           </p>
-          <ul className="welcome-help-list">
-            <li>Модель бачить усі поля та оригінальні формулювання, нічого не «згублено» при стисканні.</li>
-            <li>Корисно для складних років, декларацій змін і рідкісних кроків, де важливі деталі.</li>
-            <li>Запит у кілька разів більший → аналіз триває довше й коштує дорожче.</li>
-          </ul>
+
+          <h3 className="compact-mode-help-h3">
+            <span className="compact-mode-help-dot compact-mode-help-dot--green" aria-hidden /> Глибина: Лише компакт
+          </h3>
+          <p>
+            У запит іде стисла структура всіх кроків 0–17 (+{" "}
+            <code className="deep-research-code">raw_extras</code> лише як запобіжник поза цим
+            набором). Найменший і найдешевший запит.
+          </p>
+
+          <h3 className="compact-mode-help-h3">
+            <span className="compact-mode-help-dot compact-mode-help-dot--blue" aria-hidden /> Глибина: + raw кроки
+          </h3>
+          <p>
+            До компакту додається повна сира копія всіх заповнених кроків. Корисно, якщо модель
+            «не побачила» рідкісний актив; запит у кілька разів більший.
+          </p>
 
           <p className="compact-mode-help-tip">
-            <strong>Порада.</strong> Починайте з <strong>Економніше</strong>. Якщо звіт виходить
-            порожнім, поверхневим або модель «не побачила» якийсь актив — увімкніть{" "}
-            <strong>Детальніше</strong> й перезапустіть аналіз цієї декларації.
+            <strong>Порада.</strong> Починайте з <strong>v2 + лише компакт</strong>. Увімкніть{" "}
+            <strong>v3</strong> для масових прогонів після перевірки якості.{" "}
+            <strong>+ raw</strong> — коли звіт поверхневий або підозра, що щось зникло при стисканні.
           </p>
             </>
           )}
@@ -942,6 +949,30 @@ function CompactModeHelpModal({ onClose }) {
             Зрозуміло
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Two-option segment for compact format / depth axes. */
+function CompactAxisSegment({ label, ariaLabel, value, options, onChange }) {
+  return (
+    <div className="compact-axis">
+      <div className="compact-axis__label">{label}</div>
+      <div className="compact-axis__track" role="group" aria-label={ariaLabel || label}>
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            className={`compact-axis__btn${value === opt.value ? " is-active" : ""}`}
+            aria-pressed={value === opt.value}
+            title={opt.tooltip || undefined}
+            onClick={() => onChange(opt.value)}
+          >
+            {opt.label}
+            {opt.badge ? <span className="compact-axis__badge">{opt.badge}</span> : null}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -1058,11 +1089,11 @@ function fmtNumber(v, suffix = "") {
   return `${Math.round(Number(v))}${suffix}`;
 }
 
-function formatDurationClock(totalSec) {
+function formatDurationClock(totalSec, t = UK_T) {
   const s = Math.max(0, Math.floor(Number(totalSec) || 0));
   const mm = Math.floor(s / 60);
   const ss = s % 60;
-  if (mm <= 0) return `${ss} с`;
+  if (mm <= 0) return t("{sec} с", { sec: ss });
   return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
@@ -1140,11 +1171,14 @@ function CloudSettingsModal({
   modelListError = "",
   pipelineMaxConcurrent = 1,
   onPipelineMaxConcurrentChange,
+  mergeReplicateCount = 1,
+  onMergeReplicateCountChange,
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [error, setError] = useState("");
   const [testState, setTestState] = useState({ loading: false, ok: null, message: "" });
   const [cloudHelpOpen, setCloudHelpOpen] = useState(false);
+  const [replicaHelpOpen, setReplicaHelpOpen] = useState(false);
   const modalRef = useRef(null);
   useSmoothModalResize(modalRef);
 
@@ -1233,7 +1267,7 @@ function CloudSettingsModal({
   const hostPlaceholder =
     provider === "openrouter" ? "https://openrouter.ai/api/v1" : "https://ollama.com";
   const modelPlaceholder =
-    provider === "openrouter" ? "meta-llama/llama-3.3-70b-instruct" : "gpt-oss:120b-cloud";
+    provider === "openrouter" ? "qwen/qwen3-30b-a3b-instruct-2507" : "gpt-oss:120b-cloud";
   const keyPlaceholder = provider === "openrouter" ? "sk-or-v1-..." : "sk-...";
   const reloadTip =
     provider === "openrouter"
@@ -1290,7 +1324,7 @@ function CloudSettingsModal({
       setTestState({
         loading: false,
         ok: false,
-        message: `Для тесту вкажіть ${isOpenrouter ? "OpenRouter host" : "Ollama host"}.`,
+        message: t("Для тесту вкажіть {host}.", { host: isOpenrouter ? "OpenRouter host" : "Ollama host" }),
       });
       return;
     }
@@ -1310,7 +1344,7 @@ function CloudSettingsModal({
         setTestState({
           loading: false,
           ok: false,
-          message: `Метод ${methodName} недоступний. Перезапустіть app.`,
+          message: t("Метод {name} недоступний. Перезапустіть app.", { name: methodName }),
         });
         return;
       }
@@ -1328,7 +1362,7 @@ function CloudSettingsModal({
       setTestState({
         loading: false,
         ok: false,
-        message: `Помилка тесту: ${String(e)}`,
+        message: t("Помилка тесту: {error}", { error: String(e) }),
       });
     }
   };
@@ -1452,7 +1486,7 @@ function CloudSettingsModal({
                   {openrouterCreditsLoading
                     ? "Баланс: …"
                     : openrouterCreditsLabel
-                      ? `Баланс: ${openrouterCreditsLabel}`
+                      ? t("Баланс: {value}", { value: openrouterCreditsLabel })
                       : openrouterCreditsHint
                         ? "Баланс: —"
                         : "Баланс: (введіть ключ)"}
@@ -1506,6 +1540,38 @@ function CloudSettingsModal({
                     }
                   }}
                 />
+              </div>
+              <div className="cloud-openrouter-parallel-group">
+                <LabelWithTooltip
+                  as="label"
+                  className="cloud-label cloud-label--inline"
+                  text="Реплік:"
+                  tip={SIDEBAR_TOOLTIPS.mergeReplicateCount}
+                />
+                <input
+                  className="field-input field-input--short cloud-parallel-input"
+                  type="number"
+                  min={1}
+                  max={5}
+                  step={1}
+                  value={mergeReplicateCount}
+                  onChange={(e) => {
+                    const v = Math.floor(Number(e.target.value));
+                    if (typeof onMergeReplicateCountChange === "function") {
+                      onMergeReplicateCountChange(
+                        Number.isFinite(v) ? Math.min(5, Math.max(1, v)) : 1
+                      );
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="welcome-help-btn cloud-replicas-help-trigger"
+                  aria-label="Чим відрізняються Паралель і Реплік"
+                  onClick={() => setReplicaHelpOpen(true)}
+                >
+                  ?
+                </button>
               </div>
             </div>
           ) : null}
@@ -1687,7 +1753,7 @@ function CloudSettingsModal({
                     <strong>OpenRouter host</strong> — залиште як є: https://openrouter.ai/api/v1
                   </li>
                   <li>
-                    <strong>OpenRouter model</strong> — оберіть модель (наприклад meta-llama/llama-3.3-70b-instruct)
+                    <strong>OpenRouter model</strong> — оберіть модель (наприклад qwen/qwen3-30b-a3b-instruct-2507)
                   </li>
                   <li>
                     <strong>OpenRouter API key</strong> — вставте сюди ключ <code>sk-or-v1-...</code>
@@ -1700,6 +1766,48 @@ function CloudSettingsModal({
           </div>
           <div className="cloud-help-footer">
             <button type="button" className="btn-primary" onClick={() => setCloudHelpOpen(false)}>
+              Зрозуміло
+            </button>
+          </div>
+        </div>
+      </div>
+    </AnimatedModalPresence>
+    <AnimatedModalPresence when={replicaHelpOpen}>
+      <div
+        className="cloud-help-overlay"
+        role="presentation"
+        onClick={() => setReplicaHelpOpen(false)}
+      >
+        <div
+          className="cloud-help-dialog cloud-help-dialog--compact"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="replica-help-heading"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h2 id="replica-help-heading" className="cloud-help-title">
+            Паралель і Реплік
+          </h2>
+          <div className="cloud-help-body">
+            <p>
+              <strong>Паралель</strong> — скільки різних декларацій аналізуються одночасно. Лише
+              швидкість: кожна декларація аналізується один раз, вартість та сама.
+            </p>
+            <p>
+              <strong>Реплік</strong> — скільки разів аналізувати одну й ту саму декларацію
+              незалежно; Jev зшиває прогони в один результат. Вартість — у N разів більша.
+            </p>
+            <p>
+              <strong>Разом:</strong> репліки однієї декларації йдуть одночасно, а не по черзі.
+              Декларація потрапляє у звіт, щойно завершились усі її прогони й Jev їх зшив; її місце
+              одразу займає наступна з черги.
+            </p>
+            <p className="cloud-help-example">
+              Паралель 3, Реплік 3 → в роботі три декларації по три прогони, до 9 запитів одночасно.
+            </p>
+          </div>
+          <div className="cloud-help-footer">
+            <button type="button" className="btn-primary" onClick={() => setReplicaHelpOpen(false)}>
               Зрозуміло
             </button>
           </div>
@@ -1818,6 +1926,17 @@ function AboutProgramModal({ onClose, onOpenWelcome, showHeaderTaglines, onShowH
                 ?
               </button>
             </TooltipWrap>
+            <TooltipWrap tip="Налаштування, декларації, звіти й кеші зберігаються в одній теці">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  if (api()?.open_data_folder) void api().open_data_folder();
+                }}
+              >
+                Тека з даними
+              </button>
+            </TooltipWrap>
             <button type="button" className="btn-secondary" onClick={onClose}>
               Закрити
             </button>
@@ -1860,7 +1979,7 @@ function WipeUsageTracesModal({ onClose, onConfirm, busy }) {
           <p className="dossier-debug-hint">
             Буде видалено файли декларацій, звітів (JSONL, CSV, HTML), результати compare та deep
             research, audit-артефакти, <code className="deep-research-code">settings.json</code> та
-            інші службові файли поруч із програмою. <strong>Папки залишаться</strong> (можуть бути
+            інші службові файли в теці з даними. <strong>Папки залишаться</strong> (можуть бути
             порожніми). Дію не можна скасувати.
           </p>
           <label className="cloud-label" htmlFor="wipe-traces-confirm">
@@ -2864,6 +2983,254 @@ function nazkFilterOptionLabel(options, value) {
   return hit && hit.value ? hit.label : null;
 }
 
+const NAZK_BULK_RANDOM_DEFAULTS = {
+  mode: "pool_cap",
+  poolCap: 500,
+  pagesCap: 15,
+  randomPagesCount: 5,
+};
+
+const NAZK_BULK_RANDOM_MODES = [
+  {
+    id: "pool_cap",
+    label: "Швидкий пул",
+    badge: "Рекомендовано",
+    hint: "Збирає обмежений пул кандидатів, потім випадково обирає потрібну кількість.",
+  },
+  {
+    id: "pages_cap",
+    label: "Обмежено сторінками",
+    hint: "Сканує лише перші сторінки списку API — компроміс між швидкістю та охопленням.",
+  },
+  {
+    id: "random_pages",
+    label: "Випадкові сторінки",
+    hint: "Тягне кілька випадкових сторінок API — краще розкидано по реєстру, ніж «з початку списку».",
+  },
+  {
+    id: "full",
+    label: "Повний пул API",
+    hint: "Усі доступні сторінки (до ~10 000 записів). Найрівномірніше, але найдовше.",
+  },
+];
+
+function renderNazkBulkRandomModeParams(mode, s, onChange) {
+  const normalized = normalizeNazkBulkRandomSettings({ ...s, mode });
+  if (mode === "pool_cap") {
+    return (
+      <div className="parse-random-param">
+        <div className="parse-random-param-field">
+          <label className="cloud-label parse-random-param-label" htmlFor="nazk-random-pool-cap">
+            Максимум кандидатів у пулі
+          </label>
+          <input
+            id="nazk-random-pool-cap"
+            className="field-input"
+            type="number"
+            min={10}
+            max={10000}
+            step={10}
+            value={normalized.poolCap}
+            onChange={(e) => onChange({ ...normalized, poolCap: e.target.value })}
+          />
+        </div>
+        <p className="deep-research-hint parse-random-param-hint">
+          Збір зупиниться після <strong>{normalized.poolCap}</strong> нових id (які ще не збережені у
+          папці). Для 10 декларацій зазвичай достатньо <strong>100–500</strong>.
+        </p>
+      </div>
+    );
+  }
+  if (mode === "pages_cap") {
+    return (
+      <div className="parse-random-param">
+        <div className="parse-random-param-field">
+          <label className="cloud-label parse-random-param-label" htmlFor="nazk-random-pages-cap">
+            Сторінок API для сканування
+          </label>
+          <input
+            id="nazk-random-pages-cap"
+            className="field-input"
+            type="number"
+            min={1}
+            max={100}
+            step={1}
+            value={normalized.pagesCap}
+            onChange={(e) => onChange({ ...normalized, pagesCap: e.target.value })}
+          />
+        </div>
+        <p className="deep-research-hint parse-random-param-hint">
+          Буде опитано перші <strong>{normalized.pagesCap}</strong> стор. (до{" "}
+          <strong>{normalized.pagesCap * 100}</strong> записів, якщо сторінки повні), далі — випадковий
+          відбір.
+        </p>
+      </div>
+    );
+  }
+  if (mode === "random_pages") {
+    return (
+      <div className="parse-random-param">
+        <div className="parse-random-param-field">
+          <label className="cloud-label parse-random-param-label" htmlFor="nazk-random-pages-count">
+            Кількість випадкових сторінок
+          </label>
+          <input
+            id="nazk-random-pages-count"
+            className="field-input"
+            type="number"
+            min={1}
+            max={100}
+            step={1}
+            value={normalized.randomPagesCount}
+            onChange={(e) => onChange({ ...normalized, randomPagesCount: e.target.value })}
+          />
+        </div>
+        <p className="deep-research-hint parse-random-param-hint">
+          API поверне <strong>{normalized.randomPagesCount}</strong> випадкових сторінок списку (номери
+          щоразу інші), з них буде сформовано пул для вибірки.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="parse-random-param parse-random-param--info">
+      <p className="parse-random-param-info-title">Без додаткових параметрів</p>
+      <p className="deep-research-hint parse-random-param-hint">
+        Програма послідовно обійде <strong>усі 100 сторінок</strong> API (до ~10 000 кандидатів), потім
+        обере випадкову підмножину. Очікуйте <strong>кілька хвилин</strong> лише на етап збору.
+      </p>
+    </div>
+  );
+}
+
+function normalizeNazkBulkRandomSettings(raw) {
+  const d = NAZK_BULK_RANDOM_DEFAULTS;
+  const modeRaw = String(raw?.mode || d.mode);
+  const mode = NAZK_BULK_RANDOM_MODES.some((m) => m.id === modeRaw) ? modeRaw : d.mode;
+  const poolCap = Math.min(10000, Math.max(10, parseInt(String(raw?.poolCap ?? raw?.pool_cap ?? d.poolCap), 10) || d.poolCap));
+  const pagesCap = Math.min(100, Math.max(1, parseInt(String(raw?.pagesCap ?? raw?.pages_cap ?? d.pagesCap), 10) || d.pagesCap));
+  const randomPagesCount = Math.min(
+    100,
+    Math.max(1, parseInt(String(raw?.randomPagesCount ?? raw?.random_pages_count ?? d.randomPagesCount), 10) || d.randomPagesCount)
+  );
+  return { mode, poolCap, pagesCap, randomPagesCount };
+}
+
+function nazkBulkRandomOptionsPayload(settings) {
+  const s = normalizeNazkBulkRandomSettings(settings);
+  return {
+    mode: s.mode,
+    pool_cap: s.poolCap,
+    pages_cap: s.pagesCap,
+    random_pages_count: s.randomPagesCount,
+  };
+}
+
+function nazkBulkRandomModeLabel(mode) {
+  return NAZK_BULK_RANDOM_MODES.find((m) => m.id === mode)?.label || mode;
+}
+
+function describeNazkBulkRandomHint(randomOn, settings, t) {
+  if (!randomOn) return null;
+  const s = normalizeNazkBulkRandomSettings(settings);
+  const mode = NAZK_BULK_RANDOM_MODES.find((m) => m.id === s.mode);
+  const label = t(mode?.label || s.mode);
+  if (s.mode === "pool_cap") {
+    return t("Режим «{mode}»: випадкові декларації з пулу до {n} кандидатів (за рік і фільтрами).", {
+      mode: label,
+      n: s.poolCap,
+    });
+  }
+  if (s.mode === "pages_cap") {
+    return t("Режим «{mode}»: випадкова вибірка після сканування {n} стор. API.", {
+      mode: label,
+      n: s.pagesCap,
+    });
+  }
+  if (s.mode === "random_pages") {
+    return t("Режим «{mode}»: {n} випадкових сторінок API, потім вибір декларацій.", {
+      mode: label,
+      n: s.randomPagesCount,
+    });
+  }
+  return t("Режим «{mode}»: випадкова вибірка з усього доступного пулу API (до ~10 000).", { mode: label });
+}
+
+function ParseBulkRandomSettingsModal({ settings, onChange, onClose, onSave }) {
+  const s = normalizeNazkBulkRandomSettings(settings);
+  const modalRef = useRef(null);
+  useSmoothModalResize(modalRef);
+
+  return (
+    <div className="cloud-modal-overlay" role="presentation" onClick={onClose}>
+      <div
+        ref={modalRef}
+        className="cloud-modal parse-random-settings-modal cloud-modal--smooth-size"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="parse-random-settings-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cloud-modal-title" id="parse-random-settings-title">
+          Налаштування випадкового відбору
+        </div>
+        <div className="cloud-modal-body parse-random-settings-body">
+          <p className="deep-research-hint parse-random-settings-intro">
+            API НАЗК не має режиму «random». Спочатку збирається пул кандидатів за вашими фільтрами, потім
+            з нього випадково обирається потрібна кількість декларацій.
+          </p>
+          <fieldset className="parse-random-mode-fieldset">
+            <legend className="cloud-label parse-random-section-label">Режим рандомізації</legend>
+            <div className="parse-random-mode-list" role="radiogroup" aria-label="Режим рандомізації">
+              {NAZK_BULK_RANDOM_MODES.map((m) => {
+                const active = s.mode === m.id;
+                return (
+                  <label
+                    key={m.id}
+                    className={`parse-random-mode-option${active ? " parse-random-mode-option--active" : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      name="nazk-random-mode"
+                      value={m.id}
+                      checked={active}
+                      onChange={() => onChange({ ...s, mode: m.id })}
+                    />
+                    <span className="parse-random-mode-option-head">
+                      <span className="parse-random-mode-option-title">{m.label}</span>
+                      {m.badge ? (
+                        <span className="parse-random-mode-option-badge">{m.badge}</span>
+                      ) : null}
+                    </span>
+                    <span className="parse-random-mode-option-hint">{m.hint}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+          <div className="parse-random-params-shell">
+            <p className="cloud-label parse-random-section-label parse-random-params-heading">
+              Параметри режиму
+            </p>
+            <AnimatedTabPanel
+              tabKey={s.mode}
+              render={(mode) => renderNazkBulkRandomModeParams(mode, s, onChange)}
+            />
+          </div>
+        </div>
+        <div className="cloud-modal-actions">
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Скасувати
+          </button>
+          <button type="button" className="btn-primary" onClick={onSave}>
+            Зберегти
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ParseDeclarationModal({
   tab,
   onTab,
@@ -2878,6 +3245,10 @@ function ParseDeclarationModal({
   bulkDeclarationType,
   bulkDocumentType,
   bulkTargetDir,
+  bulkRandom,
+  onChangeBulkRandom,
+  bulkRandomSettings,
+  onOpenBulkRandomSettings,
   onChangeBulkYear,
   onChangeBulkCount,
   onChangeBulkDeclarationType,
@@ -2891,6 +3262,7 @@ function ParseDeclarationModal({
   onSubmitSingle,
   onSubmitBulk,
 }) {
+  const { t } = useI18n();
   const maxYear = new Date().getFullYear();
   const modalRef = useRef(null);
   useSmoothModalResize(modalRef);
@@ -2946,11 +3318,26 @@ function ParseDeclarationModal({
                 </>
               ) : (
                 <>
-                  <p className="deep-research-hint">
-                    За відкритим API НАЗК завантажуються перші <strong>нові</strong> декларації за обраними
-                    фільтрами (рік, пошук, вид, тип документа), поки не набереться потрібна кількість. Файли, що вже
-                    є у папці, пропускаються.
-                  </p>
+                  <div className="parse-bulk-hint-slot" aria-live="polite">
+                    <p
+                      className={`deep-research-hint parse-bulk-hint-layer${
+                        bulkRandom ? " parse-bulk-hint-layer--hidden" : ""
+                      }`}
+                    >
+                      За відкритим API НАЗК завантажуються перші <strong>нові</strong> декларації за обраними
+                      фільтрами (рік, пошук, вид, тип документа), поки не набереться потрібна кількість. Файли, що вже
+                      є у папці, пропускаються.
+                    </p>
+                    <p
+                      className={`deep-research-hint parse-bulk-hint-layer${
+                        !bulkRandom ? " parse-bulk-hint-layer--hidden" : ""
+                      }`}
+                    >
+                      {describeNazkBulkRandomHint(true, bulkRandomSettings, t) ||
+                        "Випадкова вибірка за обраним роком."}{" "}
+                      Файли, що вже є у папці, не потрапляють у пул кандидатів.
+                    </p>
+                  </div>
                   <div className="parse-bulk-form">
                     <div className="parse-bulk-form-row parse-bulk-form-row--triple">
                       <div
@@ -3073,6 +3460,60 @@ function ParseDeclarationModal({
                     disabled={loading}
                   />
                   <div className="parse-modal-actions-end">
+                    <div className="parse-bulk-random-controls">
+                      <TooltipWrap tip="Випадкова вибірка за обраним роком">
+                        <button
+                          type="button"
+                          className={`btn-shuffle${bulkRandom ? " btn-shuffle--active" : ""}`}
+                          aria-pressed={bulkRandom}
+                          aria-label="Випадкова черга"
+                          onClick={() => onChangeBulkRandom(!bulkRandom)}
+                          disabled={loading || !bulkUseYear}
+                        >
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M16 3h5v5" />
+                            <path d="M4 20L21 3" />
+                            <path d="M21 16v5h-5" />
+                            <path d="M15 15l6 6" />
+                            <path d="M4 4l5 5" />
+                          </svg>
+                        </button>
+                      </TooltipWrap>
+                      <TooltipWrap tip="Налаштування випадкового відбору">
+                        <button
+                          type="button"
+                          className="btn-shuffle btn-shuffle--settings"
+                          aria-label="Налаштування випадкового відбору"
+                          onClick={onOpenBulkRandomSettings}
+                          disabled={loading || !bulkUseYear}
+                        >
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                          </svg>
+                        </button>
+                      </TooltipWrap>
+                    </div>
                     <button type="button" className="btn-secondary" onClick={onCancel} disabled={loading}>
                       Скасувати
                     </button>
@@ -3110,9 +3551,16 @@ function PromptVersionBar({
   onSave,
   onRename,
   onDelete,
+  builtinDisplayName,
 }) {
+  const { t } = useI18n();
   const savedNames = Object.keys(versions).sort((a, b) => a.localeCompare(b));
-  const isNamed = activeVersion !== "core" && activeVersion !== "__custom__";
+  const isNamed = activeVersion !== "__builtin__" && activeVersion !== "__custom__";
+  // Сентинел "__builtin__" однаковий для всіх вкладок (означає "показує
+  // live-текст із коду/вбудованого файлу"), а справжня назва в кожної своя:
+  // pipeline — core-2, dossier — delta-1, Jev — ім'я з самого JSON набору питань.
+  // Лейбл тут косметичний, на сам сентинел не впливає.
+  const builtinLabel = t("{name} (вбудований)", { name: builtinDisplayName });
   return (
     <div className="prompt-version-block">
       <label className="cloud-label" htmlFor={`prompt-version-select-${tabKey}`}>
@@ -3125,7 +3573,7 @@ function PromptVersionBar({
           value={activeVersion}
           onChange={(e) => onSelect(tabKey, e.target.value)}
         >
-          <option value="core">core (вбудований)</option>
+          <option value="__builtin__">{builtinLabel}</option>
           {activeVersion === "__custom__" && (
             <option value="__custom__" disabled>
               — незбережені зміни —
@@ -3212,7 +3660,12 @@ function PromptSessionModal({
   onSaveVersion,
   onRenameVersion,
   onDeleteVersion,
+  jevBuiltinName,
+  pairBuiltinName,
 }) {
+  const builtinDisplayName =
+    tab === "pipeline" ? "core-2" : tab === "jev" ? jevBuiltinName : tab === "pair" ? pairBuiltinName : "delta-1";
+  const tabIndex = { pipeline: 0, dossier: 1, jev: 2, pair: 3 }[tab] ?? 0;
   return (
     <div className="cloud-modal-overlay">
       <div className="cloud-modal prompt-editor-modal">
@@ -3221,9 +3674,16 @@ function PromptSessionModal({
           Зміни застосовуються лише до поточного запуску програми й не записуються у файли проєкту.
           Після закриття застосунку все знову береться з коду. Оригінальні рядки у{" "}
           <code className="deep-research-code">main.py</code> та{" "}
-          <code className="deep-research-code">dossier_html_summary.py</code> не змінюються.
+          <code className="deep-research-code">dossier/summary.py</code> не змінюються.
         </p>
-        <div className="deep-research-tabs parse-modal-tabs" role="tablist">
+        <div
+          className="deep-research-tabs parse-modal-tabs"
+          role="tablist"
+          style={{
+            "--active-tab-index": tabIndex,
+            "--tabs-count": 4,
+          }}
+        >
           <button
             type="button"
             role="tab"
@@ -3244,6 +3704,26 @@ function PromptSessionModal({
           >
             Досьє (HTML-звіт)
           </button>
+          <button
+            type="button"
+            role="tab"
+            className={`deep-research-tab${tab === "jev" ? " deep-research-tab--active" : ""}`}
+            aria-selected={tab === "jev"}
+            onClick={() => !loadingBuiltin && onTab("jev")}
+            disabled={loadingBuiltin}
+          >
+            Jev: декларація
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`deep-research-tab${tab === "pair" ? " deep-research-tab--active" : ""}`}
+            aria-selected={tab === "pair"}
+            onClick={() => !loadingBuiltin && onTab("pair")}
+            disabled={loadingBuiltin}
+          >
+            Jev: зміни досьє
+          </button>
         </div>
         {!loadingBuiltin && (
           <PromptVersionBar
@@ -3257,6 +3737,7 @@ function PromptSessionModal({
             onSave={onSaveVersion}
             onRename={onRenameVersion}
             onDelete={onDeleteVersion}
+            builtinDisplayName={builtinDisplayName}
           />
         )}
         <div className="cloud-modal-body prompt-editor-body">
@@ -3294,7 +3775,8 @@ function PromptSessionModal({
               <p className="deep-research-hint">
                 User-шаблон для переаналізу HTML має містити{" "}
                 <code className="deep-research-code">{"{html_fragment}"}</code> та{" "}
-                <code className="deep-research-code">{"{truncation_note}"}</code>.
+                <code className="deep-research-code">{"{truncation_note}"}</code>. Необов'язково:{" "}
+                <code className="deep-research-code">{"{changes_timeline}"}</code> — хронологія змін між роками (Jev).
               </p>
               <label className="cloud-label">System (досьє)</label>
               <textarea
@@ -3308,6 +3790,37 @@ function PromptSessionModal({
                 className="field-input prompt-editor-textarea"
                 value={draft.dossierUser}
                 onChange={(e) => onDraftField("dossierUser", e.target.value)}
+                spellCheck={false}
+              />
+            </>
+          )}
+          {tab === "jev" && !loadingBuiltin && (
+            <>
+              <p className="deep-research-hint">
+                Сирий JSON набору питань Jev — той самий, що й для сортування черги/каталогу{" "}
+                («Оцінити Jev») і для Jev-підказки LLM. Формат: `{"{"}"name", "model", "state",
+                "questions", "mapping"{"}"}`. Невалідний JSON чи схема провалить перший наступний
+                виклик Jev з чіткою помилкою — застосунок не блокує застосування завчасно.
+              </p>
+              <label className="cloud-label">Набір питань Jev (JSON)</label>
+              <textarea
+                className="field-input prompt-editor-textarea prompt-editor-textarea--jev"
+                value={draft.jevSystem}
+                onChange={(e) => onDraftField("jevSystem", e.target.value)}
+                spellCheck={false}
+              />
+            </>
+          )}
+          {tab === "pair" && !loadingBuiltin && (
+            <>
+              <p className="deep-research-hint">
+                Набір питань до пари сусідніх декларацій досьє: розділ і графік «Зміни між роками» та хронологія для підсумку. Різницю між роками рахує код, Jev лише оцінює її. Score-питання пріоритету задає mapping.risk_question. Зміни підхоплюються при наступному формуванні звіту досьє; кеш оцінок оновиться сам.
+              </p>
+              <label className="cloud-label">Набір питань змін між роками (JSON)</label>
+              <textarea
+                className="field-input prompt-editor-textarea prompt-editor-textarea--jev"
+                value={draft.pairSystem || ""}
+                onChange={(e) => onDraftField("pairSystem", e.target.value)}
                 spellCheck={false}
               />
             </>
@@ -3338,6 +3851,7 @@ function sortOrderShortLabel(order) {
     case "mtime-asc":  return "Дата↑";
     case "size":       return "Розм↓";
     case "size-asc":   return "Розм↑";
+    case "jev":        return "Jev↓";
     default:           return "А→Я";
   }
 }
@@ -3354,7 +3868,10 @@ function SortDropdown({
   anchorRef,
   menuRef,
   sortModeActive,
+  jevScoredCount = 0,
+  jevTotalCount = 0,
 }) {
+  const { t } = useI18n();
   const [rendered, setRendered] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -3383,11 +3900,11 @@ function SortDropdown({
       setRendered(true);
     } else if (rendered && !exiting) {
       setExiting(true);
-      const t = setTimeout(() => {
+      const timer = setTimeout(() => {
         setRendered(false);
         setExiting(false);
       }, SORT_DROPDOWN_EXIT_MS);
-      return () => clearTimeout(t);
+      return () => clearTimeout(timer);
     }
   }, [open]);
 
@@ -3442,6 +3959,31 @@ function SortDropdown({
         <div className="sort-dropdown-group-label">За розміром</div>
         {item("size", "Спочатку більші")}
         {item("size-asc", "Спочатку менші")}
+        <div className="sort-dropdown-sep" role="separator" />
+        <div className="sort-dropdown-group-label">За ризиком (Jev)</div>
+        <button
+          type="button"
+          role="menuitem"
+          className={`sort-dropdown-item sort-dropdown-item--with-hint${sortOrder === "jev" ? " sort-dropdown-item--active" : ""}`}
+          onClick={() => onPick("jev")}
+          title={
+            jevTotalCount === 0
+              ? "Список файлів ще не завантажено — відкриється разом із вибором."
+              : jevScoredCount === 0
+              ? "Жодного файлу ще не оцінено. Спочатку натисніть «Оцінити Jev» у модалці «Каталог»."
+              : jevScoredCount < jevTotalCount
+              ? t("Оцінено {scored} з {total}. Неоцінені підуть у кінці списком за алфавітом.", {
+                  scored: jevScoredCount,
+                  total: jevTotalCount,
+                })
+              : "Усі файли оцінено — повний ризик-порядок."
+          }
+        >
+          Спочатку найризикованіші
+          <span className="sort-dropdown-item__hint">
+            {jevTotalCount > 0 ? t("{scored}/{total} оцінено", { scored: jevScoredCount, total: jevTotalCount }) : "…"}
+          </span>
+        </button>
       </div>,
       document.body
     );
@@ -3582,7 +4124,13 @@ function FilePickerModal({
   procFolderCount,
   onOpenDeclarationsFolder,
   openrouterCostHint = { kind: "hidden" },
+  jevScores = {},
+  jevLoading = false,
+  jevError = "",
+  jevProgress = { done: 0, total: 0 },
+  onScoreJev,
 }) {
+  const { t } = useI18n();
   const selectedCount =
     draftSelectedCount != null ? draftSelectedCount : draftSelected.size;
   const [search, setSearch] = useState("");
@@ -3655,6 +4203,12 @@ function FilePickerModal({
           case "full_name": va = (a.full_name || "").toLowerCase(); vb = (b.full_name || "").toLowerCase(); break;
           case "year":      va = Number(a.declaration_year) || 0;   vb = Number(b.declaration_year) || 0;   break;
           case "workplace": va = (a.workplace || "").toLowerCase(); vb = (b.workplace || "").toLowerCase(); break;
+          case "jev_risk":
+            va = jevScores[a.name]?.risk_score;
+            vb = jevScores[b.name]?.risk_score;
+            va = typeof va === "number" ? va : -1;
+            vb = typeof vb === "number" ? vb : -1;
+            break;
           default:          va = ""; vb = "";
         }
         if (typeof va === "number") {
@@ -3688,6 +4242,15 @@ function FilePickerModal({
   const thClass = (col) =>
     `sortable-col${tableSort.col === col ? " sortable-col--active" : ""}`;
 
+  // Пороги — орієнтир, не калібрована шкала: у Jev "нічого підозрілого"
+  // зазвичай осідає близько ~47, а не ~15, як у LLM-оцінок (docs/JEV.md §3.3).
+  const jevScoreBand = (score) => {
+    if (typeof score !== "number") return "";
+    if (score >= 70) return "file-picker-jev-score--high";
+    if (score >= 45) return "file-picker-jev-score--medium";
+    return "file-picker-jev-score--low";
+  };
+
   return (
     <div className="cloud-modals-stack">
       <div
@@ -3710,6 +4273,36 @@ function FilePickerModal({
               >
                 Знайдено: {displayRows.length}
               </span>
+              {jevLoading ? (
+                <div className="file-picker-jev-progress" role="progressbar"
+                  aria-valuenow={jevProgress.done} aria-valuemin={0} aria-valuemax={jevProgress.total || undefined}>
+                  <div className="file-picker-jev-progress-track">
+                    <div
+                      className={`file-picker-jev-progress-fill${jevProgress.total > 0 ? "" : " file-picker-jev-progress-fill--indeterminate"}`}
+                      style={jevProgress.total > 0 ? { width: `${Math.min(100, (jevProgress.done / jevProgress.total) * 100)}%` } : undefined}
+                    />
+                  </div>
+                  <span className="file-picker-jev-progress-label">
+                    {jevProgress.total > 0 ? `Jev: ${jevProgress.done} / ${jevProgress.total}` : "Jev: запуск…"}
+                  </span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="file-picker-jev-btn"
+                  onClick={onScoreJev}
+                  disabled={loading || !onScoreJev || files.length === 0}
+                  title={t(
+                    "Оцінити ризик усіх {n} декларацій у цій папці моделлю Jev " +
+                      "(не лише позначених прапорцем) — для сортування, без повного аналізу. " +
+                      "Уже оцінені файли беруться з кешу й повторно не рахуються.",
+                    { n: files.length }
+                  )}
+                >
+                  {t("Оцінити Jev ({n})", { n: files.length })}
+                </button>
+              )}
+              {jevError ? <span className="file-picker-jev-error">{jevError}</span> : null}
               <button
                 type="button"
                 className={`file-picker-search-toggle${searchPanelOpen ? " file-picker-search-toggle--open" : ""}${hasFilter && !searchPanelOpen ? " file-picker-search-toggle--has-filter" : ""}`}
@@ -3800,6 +4393,7 @@ function FilePickerModal({
                     <col className="col-decl" />
                     <col className="col-year" />
                     <col className="col-pos" />
+                    <col className="col-risk" />
                     <col className="col-wp" />
                   </colgroup>
                   <thead>
@@ -3829,6 +4423,9 @@ function FilePickerModal({
                         Рік{sortIcon("year")}
                       </th>
                       <th>Посада</th>
+                      <th className={thClass("jev_risk")} onClick={() => onSortCol("jev_risk")} title="Оцінка ризику моделлю Jev, 0-100">
+                        Jev{sortIcon("jev_risk")}
+                      </th>
                       <th className={thClass("workplace")} onClick={() => onSortCol("workplace")}>
                         Місце роботи{sortIcon("workplace")}
                       </th>
@@ -3842,6 +4439,8 @@ function FilePickerModal({
                       const pos = f.position || "";
                       const wp = f.workplace || "";
                       const checked = draftSelected.has(name);
+                      const jevEntry = jevScores[name];
+                      const jevRisk = typeof jevEntry?.risk_score === "number" ? jevEntry.risk_score : null;
                       return (
                         <tr key={name}>
                           <td>
@@ -3849,7 +4448,7 @@ function FilePickerModal({
                               type="checkbox"
                               checked={checked}
                               onChange={() => onToggleFile(name)}
-                              aria-label={`Вибрати ${name}`}
+                              aria-label={t("Вибрати {name}", { name })}
                             />
                           </td>
                           <td>
@@ -3863,6 +4462,22 @@ function FilePickerModal({
                           </td>
                           <td>
                             <FilePickerCellEllipsis tip={pos}>{pos || "—"}</FilePickerCellEllipsis>
+                          </td>
+                          <td>
+                            {jevRisk != null ? (
+                              <span
+                                className={`file-picker-jev-score ${jevScoreBand(jevRisk)}`}
+                                title={
+                                  jevEntry?.main_concern
+                                    ? t("Основний ризик: {concern}", { concern: jevEntry.main_concern })
+                                    : undefined
+                                }
+                              >
+                                {jevRisk}
+                              </span>
+                            ) : (
+                              <span className="file-picker-jev-score file-picker-jev-score--low">—</span>
+                            )}
                           </td>
                           <td>
                             <FilePickerCellEllipsis tip={wp}>{wp || "—"}</FilePickerCellEllipsis>
@@ -3925,6 +4540,7 @@ function FilePickerModal({
 }
 
 export default function App() {
+  const { locale, t: tr } = useI18n();
   const [inputDir, setInputDir] = useState("dataset_declarations");
   const [processedDir, setProcessedDir] = useState("dataset_declarations_done");
   const [outputJsonl, setOutputJsonl] = useState("analysis_results.jsonl");
@@ -3945,6 +4561,10 @@ export default function App() {
   const [pickerDeclCount, setPickerDeclCount] = useState(0);
   const [pickerProcCount, setPickerProcCount] = useState(0);
   const [filePickerDraft, setFilePickerDraft] = useState(() => new Set());
+  const [jevScores, setJevScores] = useState({});
+  const [jevLoading, setJevLoading] = useState(false);
+  const [jevError, setJevError] = useState("");
+  const [jevProgress, setJevProgress] = useState({ done: 0, total: 0 });
   const sortDropdownAnchorRef = useRef(null);
   const sortDropdownMenuRef = useRef(null);
   const filePickerCacheRef = useRef({
@@ -3979,6 +4599,10 @@ export default function App() {
   const [auditCaptureNormalizedAnalysis, setAuditCaptureNormalizedAnalysis] = useState(true);
   const [auditCaptureAttemptMeta, setAuditCaptureAttemptMeta] = useState(true);
   const [compactLegacyPayload, setCompactLegacyPayload] = useState(false);
+  const [compactFormat, setCompactFormat] = useState("v2");
+  const [compactMinify, setCompactMinify] = useState(false);
+  const [jevHintEnabled, setJevHintEnabled] = useState(false);
+  const [jevVerifyEnabled, setJevVerifyEnabled] = useState(true);
   const [debugUiMode, setDebugUiMode] = useState(false);
   /** Visual feedback after gesture unlock (not used when debug UI was already on at launch). */
   const [logoUnlockRippling, setLogoUnlockRippling] = useState(false);
@@ -3989,6 +4613,7 @@ export default function App() {
   /** idle | pulse (after successful pipeline) | fade-out (after "open report" click) */
   const [reportBtnPulse, setReportBtnPulse] = useState("idle");
   const [pipelineMaxConcurrent, setPipelineMaxConcurrent] = useState(1);
+  const [mergeReplicateCount, setMergeReplicateCount] = useState(1);
   const [cloudMode, setCloudMode] = useState(false);
   const [cloudProvider, setCloudProvider] = useState("ollama");
   const [cloudHost, setCloudHost] = useState("https://ollama.com");
@@ -3996,7 +4621,7 @@ export default function App() {
   const [cloudApiKey, setCloudApiKey] = useState("");
   // OpenRouter is a separate, isolated path; its data is stored independently of Ollama Cloud.
   const [openrouterHost, setOpenrouterHost] = useState("https://openrouter.ai/api/v1");
-  const [openrouterModel, setOpenrouterModel] = useState("meta-llama/llama-3.3-70b-instruct");
+  const [openrouterModel, setOpenrouterModel] = useState("qwen/qwen3-30b-a3b-instruct-2507");
   const [openrouterApiKey, setOpenrouterApiKey] = useState("");
   const [openrouterModels, setOpenrouterModels] = useState([]);
   /** id → short OpenRouter price string ($/1M in/out) for the dropdown */
@@ -4023,7 +4648,7 @@ export default function App() {
     },
     openrouter: {
       host: "https://openrouter.ai/api/v1",
-      model: "meta-llama/llama-3.3-70b-instruct",
+      model: "qwen/qwen3-30b-a3b-instruct-2507",
       api_key: "",
     },
   });
@@ -4125,6 +4750,14 @@ export default function App() {
   const [parseBulkDeclarationType, setParseBulkDeclarationType] = useState("");
   const [parseBulkDocumentType, setParseBulkDocumentType] = useState("");
   const [parseBulkDir, setParseBulkDir] = useState("");
+  const [parseBulkRandom, setParseBulkRandom] = useState(false);
+  const [parseBulkRandomSettings, setParseBulkRandomSettings] = useState(() => ({
+    ...NAZK_BULK_RANDOM_DEFAULTS,
+  }));
+  const [parseBulkRandomSettingsOpen, setParseBulkRandomSettingsOpen] = useState(false);
+  const [parseBulkRandomSettingsDraft, setParseBulkRandomSettingsDraft] = useState(() => ({
+    ...NAZK_BULK_RANDOM_DEFAULTS,
+  }));
   const [parseLoading, setParseLoading] = useState(false);
   const [parseLoadingHint, setParseLoadingHint] = useState("");
   const [parseDownloadProgress, setParseDownloadProgress] = useState(null);
@@ -4144,18 +4777,25 @@ export default function App() {
     pipelineUser: "",
     dossierSystem: "",
     dossierUser: "",
+    // jevUser лишається порожнім і не рендериться — вкладка Jev має лише ОДНЕ
+    // поле (сирий JSON набору питань), але спільні generic-функції нижче
+    // (resolveName, save/rename тощо) написані під пару System/User для всіх
+    // вкладок, тож jevUser існує як завжди-порожній заповнювач, щоб їх не
+    // дублювати спеціальним випадком для Jev.
+    jevSystem: "",
+    jevUser: "",
   });
   const [promptBuiltinLoading, setPromptBuiltinLoading] = useState(false);
-  /** Cached built-in prompt texts (fetched once; "core" always resolves to this) */
+  /** Cached built-in prompt texts (fetched once; "__builtin__" always resolves to this) */
   const [promptBuiltin, setPromptBuiltin] = useState(null);
-  /** Named prompt versions saved on this session: { pipeline: {name: {system,user}}, dossier: {...} } */
-  const [promptVersions, setPromptVersions] = useState({ pipeline: {}, dossier: {} });
-  /** Which version is currently loaded into promptDraft, per tab: "core" | "__custom__" | a saved name */
-  const [promptDraftVersion, setPromptDraftVersion] = useState({ pipeline: "core", dossier: "core" });
+  /** Named prompt versions saved on this session: { pipeline: {name: {system,user}}, dossier: {...}, jev: {...} } */
+  const [promptVersions, setPromptVersions] = useState({ pipeline: {}, dossier: {}, jev: {}, pair: {} });
+  /** Which version is currently loaded into promptDraft, per tab: "__builtin__" | "__custom__" | a saved name */
+  const [promptDraftVersion, setPromptDraftVersion] = useState({ pipeline: "__builtin__", dossier: "__builtin__", jev: "__builtin__", pair: "__builtin__" });
   const [promptNameInput, setPromptNameInput] = useState("");
   const [promptNameError, setPromptNameError] = useState("");
   /** Name of the version actually applied to the running session (drives the header badge + run args) */
-  const [sessionPromptNames, setSessionPromptNames] = useState({ pipeline: "core", dossier: "core" });
+  const [sessionPromptNames, setSessionPromptNames] = useState({ pipeline: "core-2", dossier: "delta-1", jev: "coreframe-13", pair: "pairframe-3" });
 
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -4395,8 +5035,8 @@ export default function App() {
   const showDossierLive = deepResearchActive && isDeepResearchInput(inputDir);
   const showUsageDashboard = !showDossierLive && !isRunning && logLines.length === 0;
   const dossierProgress = useMemo(
-    () => dossierProgressMeta(dossierChartData, isRunning),
-    [dossierChartData, isRunning],
+    () => dossierProgressMeta(dossierChartData, isRunning, tr),
+    [dossierChartData, isRunning, tr],
   );
 
   const pendingErrorCount = useMemo(
@@ -4421,12 +5061,12 @@ export default function App() {
         }
         await api().pipeline_error_action(payload);
       } catch (e) {
-        appendLog(`[ПОМИЛКА] Дія по помилці: ${e}\n`);
+        appendLog(`${tr("[ПОМИЛКА] Дія по помилці: {error}", { error: String(e) })}\n`);
       } finally {
         setErrorActionBusy(null);
       }
     },
-    [appendLog, maxChars, numPredict]
+    [appendLog, maxChars, numPredict, tr]
   );
 
   const handleErrorRaiseLimits = useCallback((file) => {
@@ -4500,7 +5140,7 @@ export default function App() {
           const data = JSON.parse(reviewEv[1]);
           const n = Number(data?.count) || 0;
           if (n > 0) {
-            setTaskText(`Очікує рішення: ${n} декларацій`);
+            setTaskText(tr("Очікує рішення: {n} декларацій", { n }));
           }
         } catch (_) {
           /* ignore malformed */
@@ -4520,7 +5160,7 @@ export default function App() {
               page: Number(data.page) || 0,
               phase: String(data.phase || ""),
             });
-            setDeepResearchLoadingHint(formatDeepDownloadProgress(data));
+            setDeepResearchLoadingHint(formatDeepDownloadProgress(data, tr));
           }
         } catch (_) {
           /* ignore malformed */
@@ -4540,7 +5180,7 @@ export default function App() {
               page: Number(data.page) || 0,
               phase: String(data.phase || ""),
             });
-            setParseLoadingHint(formatNazkDownloadProgress(data));
+            setParseLoadingHint(formatNazkDownloadProgress(data, tr));
           }
         } catch (_) {
           /* ignore malformed */
@@ -4609,7 +5249,7 @@ export default function App() {
       }
     };
     return () => { delete window._onLogLine; };
-  }, [appendLog, scheduleProcessingExit]);
+  }, [appendLog, scheduleProcessingExit, tr]);
 
   useEffect(() => {
     if (reportBtnPulse !== "fade-out") return undefined;
@@ -4636,9 +5276,9 @@ export default function App() {
         setModels(sortModelsAZ(list));
       }
     } catch (e) {
-      setModelListError(`Не вдалося оновити список моделей Ollama: ${e}`);
+      setModelListError(tr("Не вдалося оновити список моделей Ollama: {error}", { error: String(e) }));
     }
-  }, []);
+  }, [tr]);
 
   const loadCloudModels = useCallback(async (hostUrl, apiKey) => {
     if (!api()) return;
@@ -4652,9 +5292,9 @@ export default function App() {
         setCloudModels(sortModelsAZ(list));
       }
     } catch (e) {
-      setModelListError(`Не вдалося оновити список cloud-моделей: ${e}`);
+      setModelListError(tr("Не вдалося оновити список cloud-моделей: {error}", { error: String(e) }));
     }
-  }, []);
+  }, [tr]);
 
   // Alternate path: load the model list from OpenRouter /models.
   const loadOpenrouterModels = useCallback(async (hostUrl, apiKey) => {
@@ -4689,9 +5329,9 @@ export default function App() {
         setOpenrouterPricingPerToken({});
       }
     } catch (e) {
-      setModelListError(`Не вдалося оновити список OpenRouter-моделей: ${e}`);
+      setModelListError(tr("Не вдалося оновити список OpenRouter-моделей: {error}", { error: String(e) }));
     }
-  }, []);
+  }, [tr]);
 
   const refreshOpenrouterCredits = useCallback(async (hostUrl, apiKey) => {
     if (!api()) return;
@@ -4783,6 +5423,13 @@ export default function App() {
     if (s.audit_capture_normalized_analysis !== undefined) setAuditCaptureNormalizedAnalysis(Boolean(s.audit_capture_normalized_analysis));
     if (s.audit_capture_attempt_meta !== undefined) setAuditCaptureAttemptMeta(Boolean(s.audit_capture_attempt_meta));
     if (s.compact_legacy_payload !== undefined) setCompactLegacyPayload(Boolean(s.compact_legacy_payload));
+    if (s.compact_format !== undefined) {
+      const fmt = String(s.compact_format || "v2").trim().toLowerCase();
+      setCompactFormat(fmt === "v3" ? "v3" : "v2");
+    }
+    if (s.compact_minify !== undefined) setCompactMinify(Boolean(s.compact_minify));
+    if (s.jev_hint_enabled !== undefined) setJevHintEnabled(Boolean(s.jev_hint_enabled));
+    if (s.jev_verify_enabled !== undefined) setJevVerifyEnabled(Boolean(s.jev_verify_enabled));
     if (s.show_system_metrics !== undefined) setShowSystemMetrics(Boolean(s.show_system_metrics));
     if (s.play_completion_sound !== undefined) setPlayCompletionSound(Boolean(s.play_completion_sound));
     if (s.think_event_debug !== undefined) setThinkEventDebug(Boolean(s.think_event_debug));
@@ -4790,6 +5437,12 @@ export default function App() {
       const n = Number(s.pipeline_max_concurrent);
       setPipelineMaxConcurrent(
         Number.isFinite(n) ? Math.min(8, Math.max(1, Math.floor(n))) : 1
+      );
+    }
+    if (s.merge_replicate_count !== undefined) {
+      const n = Number(s.merge_replicate_count);
+      setMergeReplicateCount(
+        Number.isFinite(n) ? Math.min(5, Math.max(1, Math.floor(n))) : 1
       );
     }
     if (s.cloud_mode !== undefined) setCloudMode(Boolean(s.cloud_mode));
@@ -4804,7 +5457,7 @@ export default function App() {
     const orModel = s.openrouter_model ?? s.groq_model;
     const orKey = s.openrouter_api_key ?? s.groq_api_key;
     if (orHost !== undefined) setOpenrouterHost(orHost || "https://openrouter.ai/api/v1");
-    if (orModel !== undefined) setOpenrouterModel(orModel || "meta-llama/llama-3.3-70b-instruct");
+    if (orModel !== undefined) setOpenrouterModel(orModel || "qwen/qwen3-30b-a3b-instruct-2507");
     if (orKey !== undefined) setOpenrouterApiKey(orKey || "");
     if (s.compare_count !== undefined) {
       const n = Number(s.compare_count);
@@ -4822,6 +5475,14 @@ export default function App() {
       setCloudComparisonEnabled(Boolean(s.compare_enabled));
     }
     setShowHeaderTaglines(s.show_header_taglines !== false);
+    setParseBulkRandomSettings(
+      normalizeNazkBulkRandomSettings({
+        mode: s.nazk_bulk_random_mode,
+        pool_cap: s.nazk_bulk_random_pool_cap,
+        pages_cap: s.nazk_bulk_random_pages_cap,
+        random_pages_count: s.nazk_bulk_random_pages_count,
+      })
+    );
     if (s.host) { setHost(s.host); return s.host; }
     return "";
   }, []);
@@ -4957,6 +5618,65 @@ export default function App() {
     };
   }, [filePickerOpen, inputDir, processedDir]);
 
+  useEffect(() => {
+    setJevScores({});
+    setJevError("");
+  }, [inputDir]);
+
+  useEffect(() => {
+    // Кеш на диску переживає перезапуск застосунку, React-стан — ні. Тому при
+    // кожному завантаженні списку файлів підвантажуємо вже пораховане з диска
+    // (без мережевих викликів — лише читання кеш-файлу), щоб оцінка не
+    // "губилась" при повторному відкритті вікна.
+    if (availableFiles.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await api().jev_cached_scores(inputDir);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (cancelled || !res?.ok) return;
+        const loaded = res.scores || {};
+        if (Object.keys(loaded).length === 0) return;
+        setJevScores((prev) => ({ ...loaded, ...prev }));
+      } catch (_) {
+        /* тихо ігноруємо — це фонове підвантаження, не критична дія */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [availableFiles, inputDir]);
+
+  useEffect(() => {
+    window._onJevCatalogProgress = (payload) => {
+      const done = Number(payload?.done) || 0;
+      const total = Number(payload?.total) || 0;
+      setJevProgress({ done, total });
+    };
+    return () => { delete window._onJevCatalogProgress; };
+  }, []);
+
+  const handleScoreJev = async () => {
+    if (jevLoading) return;
+    setJevLoading(true);
+    setJevError("");
+    setJevProgress({ done: 0, total: 0 });
+    try {
+      const raw = await api().jev_score_catalog(inputDir);
+      const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (!res?.ok) {
+        setJevError(Array.isArray(res?.errors) ? res.errors.join(" ") : "Не вдалося оцінити Jev.");
+        return;
+      }
+      setJevScores((prev) => ({ ...prev, ...(res.scores || {}) }));
+      if (Array.isArray(res.errors) && res.errors.length > 0) {
+        setJevError(res.errors.join(" "));
+      }
+    } catch (e) {
+      setJevError(String(e));
+    } finally {
+      setJevLoading(false);
+    }
+  };
+
   const filePickerDraftEffective = useMemo(
     () => pruneFileNamesToAvailable(filePickerDraft, availableFiles),
     [filePickerDraft, availableFiles]
@@ -4991,7 +5711,7 @@ export default function App() {
     if (!modelId) {
       return {
         kind: "no_model",
-        line: "Оберіть модель OpenRouter у режимі Cloud (шапка або «Хмара»).",
+        line: "Оберіть модель OpenRouter у режимі Cloud (шапка або «Cloud»).",
       };
     }
     const total = estimateOpenrouterUsdForSelection(
@@ -5003,16 +5723,26 @@ export default function App() {
     );
     const { inputTok, outputTok } = estimateOpenrouterTokensOneDeclaration(maxChars, numPredict);
     if (total != null) {
-      const w = ukDeclWordAfterN(n);
+      const w = locale === "en" ? (n === 1 ? "declaration" : "declarations") : ukDeclWordAfterN(n);
       return {
         kind: "ok",
-        title: `Оцінка за ставками OpenRouter (/models). Орієнтир токенів на 1 декларацію: ~${inputTok} in, ~${outputTok} out (поля «Макс. розмір запиту» та «Макс. обсяг відповіді»).`,
-        line: `Приблизна вартість: ~$${total.toFixed(2)} USD за ${n} ${w} · ${modelId}`,
+        title: tr(
+          "Оцінка за ставками OpenRouter (/models). Орієнтир токенів на 1 декларацію: ~{inTok} in, ~{outTok} out (поля «Макс. розмір запиту» та «Макс. обсяг відповіді»).",
+          { inTok: inputTok, outTok: outputTok }
+        ),
+        line: tr("Приблизна вартість: ~{cost} USD за {n} {word} · {model}", {
+          cost: `$${total.toFixed(2)}`,
+          n,
+          word: w,
+          model: modelId,
+        }),
       };
     }
     return {
       kind: "no_rates",
-      line: `Немає ставок для «${modelId}» у кеші. Відкрийте «Хмара», щоб оновити список моделей.`,
+      line: tr("Немає ставок для «{model}» у кеші. Відкрийте «Cloud», щоб оновити список моделей.", {
+        model: modelId,
+      }),
     };
   }, [
     cloudMode,
@@ -5022,6 +5752,8 @@ export default function App() {
     openrouterPricingPerToken,
     maxChars,
     numPredict,
+    locale,
+    tr,
   ]);
 
   useEffect(() => {
@@ -5036,6 +5768,28 @@ export default function App() {
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
   }, [sortDropdownOpen]);
+
+  useEffect(() => {
+    // "Jev" у цьому дропдауні показує "N/M оцінено" і має право сортувати чергу
+    // навіть якщо користувач жодного разу не відкривав модалку «Каталог» —
+    // тому список файлів підвантажується тут окремо, а не лише при filePickerOpen.
+    if (!sortDropdownOpen || !isPywebviewApiReady()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await api().list_declaration_files(inputDir);
+        const res = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (cancelled || !res?.ok) return;
+        const list = Array.isArray(res.files) ? res.files : [];
+        setAvailableFiles((prev) =>
+          prev.length === list.length && prev.every((f, i) => f.name === list[i]?.name) ? prev : list
+        );
+      } catch (_) {
+        /* фонове підвантаження для лічильника — не критично */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sortDropdownOpen, inputDir]);
 
   useEffect(() => {
     let cancelled = false;
@@ -5256,9 +6010,9 @@ export default function App() {
     }
   };
 
-  /** Maps a session-applied name ("core" | "custom" | a saved name) to a draft-selector value. */
+  /** Maps a session-applied name (built-in name | "custom" | a saved name) to a draft-selector value. */
   const sessionNameToDraftVersion = (tabKey, name) => {
-    if (name === "core") return "core";
+    if (name === builtinVersionName(tabKey)) return "__builtin__";
     if (name === "custom") return "__custom__";
     return promptVersions[tabKey][name] ? name : "__custom__";
   };
@@ -5271,8 +6025,37 @@ export default function App() {
       pipelineUser: d.pipeline_user_prompt_template || "",
       dossierSystem: d.dossier_system_prompt || "",
       dossierUser: d.dossier_user_prompt_template || "",
+      jevSystem: d.jev_questions || "",
+      jevUser: "",
+      pairSystem: d.pair_questions || "",
+      pairUser: "",
     };
   };
+
+  /** Ім'я з "name" усередині JSON набору питань Jev (не хардкод "coreframe-13" —
+   * якщо файл колись перейменують/замінять, підпис іде за ним автоматично). */
+  const qsetName = (json, fallback) => {
+    try {
+      return String(JSON.parse(json || "{}")?.name || "").trim() || fallback;
+    } catch (_) {
+      return fallback;
+    }
+  };
+  const jevBuiltinName = () => qsetName(promptBuiltin?.jevSystem, "jev");
+  /** pairframe-N — набір питань змін між роками в досьє (dossier/changes.py). */
+  const pairBuiltinName = () => qsetName(promptBuiltin?.pairSystem, "pairframe");
+
+  /** Сентинел "__builtin__" однаковий для всіх вкладок, але кожна показує/шле
+   * СВОЮ реальну назву вбудованого: pipeline — "core-2", dossier — "delta-1",
+   * Jev — ім'я з самого JSON (coreframe-13 / pairframe-3; йде за файлом, не хардкодом). */
+  const builtinVersionName = (tabKey) =>
+    tabKey === "pipeline"
+      ? "core-2"
+      : tabKey === "jev"
+        ? jevBuiltinName()
+        : tabKey === "pair"
+          ? pairBuiltinName()
+          : "delta-1";
 
   const openPromptEditor = async () => {
     if (!api()) return;
@@ -5286,7 +6069,10 @@ export default function App() {
         builtin = await fetchBuiltinPrompts();
         setPromptBuiltin(builtin);
       } catch {
-        builtin = { pipelineSystem: "", pipelineUser: "", dossierSystem: "", dossierUser: "" };
+        builtin = {
+          pipelineSystem: "", pipelineUser: "", dossierSystem: "", dossierUser: "",
+          jevSystem: "", jevUser: "", pairSystem: "", pairUser: "",
+        };
         setPromptBuiltin(builtin);
       } finally {
         setPromptBuiltinLoading(false);
@@ -5298,16 +6084,22 @@ export default function App() {
         pipelineUser: sessionPromptOverrides.pipelineUser,
         dossierSystem: sessionPromptOverrides.dossierSystem,
         dossierUser: sessionPromptOverrides.dossierUser,
+        jevSystem: sessionPromptOverrides.jevQuestions,
+        jevUser: "",
+        pairSystem: sessionPromptOverrides.pairQuestions ?? builtin.pairSystem,
+        pairUser: "",
       });
       const dv = {
         pipeline: sessionNameToDraftVersion("pipeline", sessionPromptNames.pipeline),
         dossier: sessionNameToDraftVersion("dossier", sessionPromptNames.dossier),
+        jev: sessionNameToDraftVersion("jev", sessionPromptNames.jev),
+        pair: sessionNameToDraftVersion("pair", sessionPromptNames.pair),
       };
       setPromptDraftVersion(dv);
-      setPromptNameInput(dv.pipeline !== "core" && dv.pipeline !== "__custom__" ? dv.pipeline : "");
+      setPromptNameInput(dv.pipeline !== "__builtin__" && dv.pipeline !== "__custom__" ? dv.pipeline : "");
     } else {
       setPromptDraft(builtin);
-      setPromptDraftVersion({ pipeline: "core", dossier: "core" });
+      setPromptDraftVersion({ pipeline: "__builtin__", dossier: "__builtin__", jev: "__builtin__", pair: "__builtin__" });
       setPromptNameInput("");
     }
   };
@@ -5315,7 +6107,13 @@ export default function App() {
   /** Any manual edit invalidates the "this is version X" label until re-saved or re-selected. */
   const onPromptDraftField = (field, value) => {
     setPromptDraft((prev) => ({ ...prev, [field]: value }));
-    const tabKey = field.startsWith("pipeline") ? "pipeline" : "dossier";
+    const tabKey = field.startsWith("pipeline")
+      ? "pipeline"
+      : field.startsWith("dossier")
+        ? "dossier"
+        : field.startsWith("pair")
+          ? "pair"
+          : "jev";
     setPromptDraftVersion((prev) =>
       prev[tabKey] === "__custom__" ? prev : { ...prev, [tabKey]: "__custom__" }
     );
@@ -5324,7 +6122,7 @@ export default function App() {
   const onSelectPromptVersion = (tabKey, name) => {
     if (name === "__custom__") return;
     let system, user;
-    if (name === "core") {
+    if (name === "__builtin__") {
       if (!promptBuiltin) return;
       system = promptBuiltin[`${tabKey}System`];
       user = promptBuiltin[`${tabKey}User`];
@@ -5336,7 +6134,7 @@ export default function App() {
     }
     setPromptDraft((prev) => ({ ...prev, [`${tabKey}System`]: system, [`${tabKey}User`]: user }));
     setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: name }));
-    setPromptNameInput(name === "core" ? "" : name);
+    setPromptNameInput(name === "__builtin__" ? "" : name);
     setPromptNameError("");
   };
 
@@ -5346,8 +6144,8 @@ export default function App() {
       setPromptNameError("Вкажіть назву версії.");
       return;
     }
-    if (name.toLowerCase() === "core") {
-      setPromptNameError("Назва «core» зарезервована для вбудованого промпту.");
+    if (name.toLowerCase() === builtinVersionName(tabKey).toLowerCase()) {
+      setPromptNameError(tr("Назва «{name}» зарезервована для вбудованого промпту.", { name: name.toLowerCase() }));
       return;
     }
     const system = promptDraft[`${tabKey}System`];
@@ -5358,23 +6156,23 @@ export default function App() {
     }));
     setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: name }));
     setPromptNameError("");
-    setTaskText(`Версію промпту «${name}» збережено на сесію.`);
+    setTaskText(tr("Версію промпту «{name}» збережено на сесію.", { name }));
   };
 
   const renamePromptVersion = (tabKey) => {
     const oldName = promptDraftVersion[tabKey];
-    if (oldName === "core" || oldName === "__custom__") return;
+    if (oldName === "__builtin__" || oldName === "__custom__") return;
     const newName = promptNameInput.trim();
     if (!newName) {
       setPromptNameError("Вкажіть нову назву.");
       return;
     }
-    if (newName.toLowerCase() === "core") {
-      setPromptNameError("Назва «core» зарезервована для вбудованого промпту.");
+    if (newName.toLowerCase() === builtinVersionName(tabKey).toLowerCase()) {
+      setPromptNameError(tr("Назва «{name}» зарезервована для вбудованого промпту.", { name: newName.toLowerCase() }));
       return;
     }
     if (newName !== oldName && promptVersions[tabKey][newName]) {
-      setPromptNameError(`Версія з назвою «${newName}» вже існує.`);
+      setPromptNameError(tr("Версія з назвою «{name}» вже існує.", { name: newName }));
       return;
     }
     setPromptVersions((prev) => {
@@ -5390,12 +6188,12 @@ export default function App() {
       prev[tabKey] === oldName ? { ...prev, [tabKey]: newName } : prev
     );
     setPromptNameError("");
-    setTaskText(`Версію промпту перейменовано на «${newName}».`);
+    setTaskText(tr("Версію промпту перейменовано на «{name}».", { name: newName }));
   };
 
   const deletePromptVersion = (tabKey) => {
     const name = promptDraftVersion[tabKey];
-    if (name === "core" || name === "__custom__") return;
+    if (name === "__builtin__" || name === "__custom__") return;
     setPromptVersions((prev) => {
       const versions = { ...prev[tabKey] };
       delete versions[name];
@@ -5408,19 +6206,21 @@ export default function App() {
         [`${tabKey}User`]: promptBuiltin[`${tabKey}User`],
       }));
     }
-    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: "core" }));
+    setPromptDraftVersion((prev) => ({ ...prev, [tabKey]: "__builtin__" }));
     setPromptNameInput("");
     setPromptNameError("");
     // Deleting a catalog entry does not touch an already-applied session override — if this
     // version is live, it keeps running on its last-applied text under its (now orphaned) name.
-    setTaskText(`Версію промпту «${name}» видалено.`);
+    setTaskText(tr("Версію промпту «{name}» видалено.", { name }));
   };
 
-  const applyPromptSession = () => {
+  const applyPromptSession = async () => {
     const ps = promptDraft.pipelineSystem.trim();
     const pu = promptDraft.pipelineUser.trim();
     const ds = promptDraft.dossierSystem.trim();
     const du = promptDraft.dossierUser.trim();
+    const jq = promptDraft.jevSystem.trim();
+    const pq = (promptDraft.pairSystem || "").trim();
     if (!ps && !pu && !ds && !du) {
       setSessionPromptOverrides(null);
     } else {
@@ -5429,18 +6229,48 @@ export default function App() {
         pipelineUser: pu,
         dossierSystem: ds,
         dossierUser: du,
+        jevQuestions: jq,
+        pairQuestions: pq,
       });
     }
+    // Jev — окремо і одразу (не лениво через gatherArgs, як pipeline/dossier):
+    // jev_score_catalog викликається кнопкою в «Каталозі», а не при прогоні
+    // пайплайна, тож override має лягти на диск ЗАРАЗ, а не "при наступному запуску".
+    if (api()) {
+      const res = await api().set_session_jev_questions(jq);
+      const parsed = typeof res === "string" ? JSON.parse(res) : res;
+      if (parsed && parsed.ok === false) {
+        setPromptNameError((parsed.errors || []).join(" ") || "Не вдалося застосувати Jev-конфіг.");
+        return;
+      }
+      // Вбудований pairframe не пишемо як override: інакше кеш змін досьє
+      // (підпис за назвою файлу набору) вважав би його іншим набором.
+      const pairIsBuiltin = promptBuiltin && pq === (promptBuiltin.pairSystem || "").trim();
+      const resPair = await api().set_session_pair_questions(pairIsBuiltin ? "" : pq);
+      const parsedPair = typeof resPair === "string" ? JSON.parse(resPair) : resPair;
+      if (parsedPair && parsedPair.ok === false) {
+        setPromptNameError(
+          (parsedPair.errors || []).join(" ") || "Не вдалося застосувати набір змін між роками."
+        );
+        return;
+      }
+    }
+    // "__builtin__" — сентинел draftVersion, однаковий для всіх вкладок; реальна назва
+    // вбудованого — через builtinVersionName (core-2/delta-1/ім'я з JSON Jev).
+    // Без цього мапування сесія відправила б застарілу мітку, хоча реальний
+    // вміст, що йде далі, — вже інший (розбіжність мітка/вміст).
     const resolveName = (tabKey, sys, usr) => {
       const dv = promptDraftVersion[tabKey];
-      if (dv !== "__custom__") return dv;
+      if (dv !== "__custom__") return dv === "__builtin__" ? builtinVersionName(tabKey) : dv;
       const b = promptBuiltin;
-      if (b && sys === b[`${tabKey}System`].trim() && usr === b[`${tabKey}User`].trim()) return "core";
+      if (b && sys === b[`${tabKey}System`].trim() && usr === b[`${tabKey}User`].trim()) return builtinVersionName(tabKey);
       return "custom";
     };
     setSessionPromptNames({
       pipeline: resolveName("pipeline", ps, pu),
       dossier: resolveName("dossier", ds, du),
+      jev: resolveName("jev", jq, ""),
+      pair: resolveName("pair", pq, ""),
     });
     setPromptEditorOpen(false);
     setTaskText("Промпти сесії оновлено. Оригінали в репозиторії не змінені.");
@@ -5449,13 +6279,23 @@ export default function App() {
   const resetPromptsToBuiltin = async () => {
     if (!api()) return;
     setSessionPromptOverrides(null);
-    setSessionPromptNames({ pipeline: "core", dossier: "core" });
     setPromptBuiltinLoading(true);
     try {
+      await api().set_session_jev_questions("");
+      await api().set_session_pair_questions("");
       const builtin = await fetchBuiltinPrompts();
       setPromptBuiltin(builtin);
       setPromptDraft(builtin);
-      setPromptDraftVersion({ pipeline: "core", dossier: "core" });
+      setPromptDraftVersion({ pipeline: "__builtin__", dossier: "__builtin__", jev: "__builtin__", pair: "__builtin__" });
+      // jevBuiltinName() читає React-стан promptBuiltin, який тут ще не оновився
+      // (setPromptBuiltin вище асинхронний) — тому ім'я беремо напряму зі
+      // щойно завантаженого builtin, а не через хелпер.
+      setSessionPromptNames({
+        pipeline: "core-2",
+        dossier: "delta-1",
+        jev: qsetName(builtin.jevSystem, "jev"),
+        pair: qsetName(builtin.pairSystem, "pairframe"),
+      });
       setPromptNameInput("");
       setPromptNameError("");
       setTaskText("Тексти у редакторі скинуто до вбудованих; активні перевизначення сесії вимкнено.");
@@ -5464,7 +6304,29 @@ export default function App() {
     }
   };
 
-  const gatherArgs = () => ({
+  // "Jev" у сорт-дропдауні не має власного бекенд-режиму (--sort-order лишається
+  // локальним і без мережевих викликів): порядок рахується тут, на клієнті, з уже
+  // закешованих балів, і йде в пайплайн через наявний канал selected_files/pick —
+  // той самий, яким уже користується ручний вибір у "Каталозі".
+  const jevOrderedFileNames = () => {
+    const scored = [];
+    const unscored = [];
+    for (const f of availableFiles) {
+      const name = f.name;
+      if (typeof jevScores[name]?.risk_score === "number") scored.push(name);
+      else unscored.push(name);
+    }
+    scored.sort((a, b) => jevScores[b].risk_score - jevScores[a].risk_score);
+    unscored.sort((a, b) => a.localeCompare(b, "uk"));
+    return [...scored, ...unscored];
+  };
+
+  const gatherArgs = () => {
+    const jevQueueActive = fileQueueMode === "sort" && sortOrder === "jev";
+    const jevQueue = jevQueueActive
+      ? (maxFiles > 0 ? jevOrderedFileNames().slice(0, maxFiles) : jevOrderedFileNames())
+      : null;
+    return {
     input_dir: inputDir,
     processed_dir: processedDir,
     output_jsonl: outputJsonl,
@@ -5473,9 +6335,13 @@ export default function App() {
     findings_csv: findingsCsv,
     table_html: tableHtml,
     max_files: maxFiles,
-    file_queue_mode: fileQueueMode,
-    selected_files: fileQueueMode === "pick" && selectedFiles.length > 0 ? selectedFiles : [],
-    sort_order: fileQueueMode === "sort" ? sortOrder : "alpha",
+    file_queue_mode: jevQueue ? "pick" : fileQueueMode,
+    selected_files: jevQueue
+      ? jevQueue
+      : fileQueueMode === "pick" && selectedFiles.length > 0
+      ? selectedFiles
+      : [],
+    sort_order: fileQueueMode === "sort" && sortOrder !== "jev" ? sortOrder : "alpha",
     model,
     host,
     timeout,
@@ -5498,11 +6364,17 @@ export default function App() {
       debugUiMode && auditModeEnabled ? auditCaptureNormalizedAnalysis : false,
     audit_capture_attempt_meta: debugUiMode && auditModeEnabled ? auditCaptureAttemptMeta : false,
     compact_legacy_payload: compactLegacyPayload,
+    compact_format: compactFormat === "v3" ? "v3" : "v2",
+    compact_minify: compactFormat === "v3" ? compactMinify : false,
+    jev_hint_enabled: jevHintEnabled,
+    jev_verify_enabled: jevVerifyEnabled,
     show_system_metrics: showSystemMetrics,
     play_completion_sound: playCompletionSound,
     think_event_debug: thinkEventDebug,
     pipeline_max_concurrent:
       cloudMode && cloudProvider === "openrouter" ? pipelineMaxConcurrent : 1,
+    merge_replicate_count:
+      cloudMode && cloudProvider === "openrouter" ? mergeReplicateCount : 1,
     cloud_mode: cloudMode,
     cloud_provider: cloudProvider,
     cloud_host: cloudHost,
@@ -5528,7 +6400,8 @@ export default function App() {
           prompt_session_pipeline_name: sessionPromptNames.pipeline,
         }
       : {}),
-  });
+    };
+  };
 
   // Centralized settings autosave (debounced) so UI changes reliably reach settings.json.
   useEffect(() => {
@@ -5607,10 +6480,15 @@ export default function App() {
     auditCaptureNormalizedAnalysis,
     auditCaptureAttemptMeta,
     compactLegacyPayload,
+    compactFormat,
+    compactMinify,
+    jevHintEnabled,
+    jevVerifyEnabled,
     showSystemMetrics,
     playCompletionSound,
     thinkEventDebug,
     pipelineMaxConcurrent,
+    mergeReplicateCount,
     cloudMode,
     cloudProvider,
     cloudHost,
@@ -5680,7 +6558,7 @@ export default function App() {
       if (res && !res.ok) appendLog("[DEBUG] Підсумок досьє не застосовано до HTML.\n");
       setTaskText(res?.ok ? "Підсумок досьє (debug) готово" : "Підсумок досьє (debug): помилка");
     } catch (e) {
-      appendLog(`[ПОМИЛКА] debug підсумок досьє: ${e}\n`);
+      appendLog(`${tr("[ПОМИЛКА] debug підсумок досьє: {error}", { error: String(e) })}\n`);
       setTaskText(String(e));
     } finally {
       setDossierSummaryBusy(false);
@@ -5704,9 +6582,9 @@ export default function App() {
       if (res?.ok) {
         try {
           await api().open_file_path(res.path);
-          appendLog(`[COMPARE] Відкрито compare-звіт: ${res.path}\n`);
+          appendLog(`${tr("[COMPARE] Відкрито compare-звіт: {path}", { path: res.path })}\n`);
         } catch (openErr) {
-          appendLog(`[COMPARE] Не вдалося авто-відкрити compare-звіт: ${openErr}\n`);
+          appendLog(`${tr("[COMPARE] Не вдалося авто-відкрити compare-звіт: {error}", { error: String(openErr) })}\n`);
         }
         setTaskText("Порівняння моделей завершено");
       } else {
@@ -5714,7 +6592,7 @@ export default function App() {
       }
       return res;
     } catch (e) {
-      appendLog(`[ПОМИЛКА] compare: ${e}\n`);
+      appendLog(`${tr("[ПОМИЛКА] compare: {error}", { error: String(e) })}\n`);
       setTaskText(String(e));
       return { ok: false, message: String(e) };
     } finally {
@@ -5737,7 +6615,7 @@ export default function App() {
         setTaskText("Перегенерація звітів: помилка");
       }
     } catch (e) {
-      appendLog(`[ПОМИЛКА] перегенерація звітів: ${e}\n`);
+      appendLog(`${tr("[ПОМИЛКА] перегенерація звітів: {error}", { error: String(e) })}\n`);
       setTaskText(String(e));
     } finally {
       setExtraReportBusy(false);
@@ -5752,19 +6630,21 @@ export default function App() {
       const raw = await api().debug_wipe_usage_traces(gatherArgs());
       const res = typeof raw === "string" ? JSON.parse(raw) : raw;
       if (res?.errors?.length) {
-        appendLog(`[WIPE] Помилки (${res.errors.length}): ${res.errors.slice(0, 3).join("; ")}\n`);
+        appendLog(
+          `${tr("[WIPE] Помилки ({n}): {list}", { n: res.errors.length, list: res.errors.slice(0, 3).join("; ") })}\n`
+        );
       }
       const n = Number(res?.deleted_count) || 0;
       if (res?.ok !== false || n > 0) {
         setSessionPromptOverrides(null);
-        setSessionPromptNames({ pipeline: "core", dossier: "core" });
+        setSessionPromptNames({ pipeline: "core-2", dossier: "delta-1", jev: jevBuiltinName(), pair: pairBuiltinName() });
         const settingsRaw = await api().load_settings();
         const s = typeof settingsRaw === "string" ? JSON.parse(settingsRaw) : settingsRaw;
         applySettings(s);
         lastAutosavedPayloadRef.current = "";
         setTaskText(
           n > 0
-            ? `Сліди використання видалено (${n} файлів)`
+            ? tr("Сліди використання видалено ({n} файлів)", { n })
             : "Слідів використання не знайдено"
         );
         setWipeModalOpen(false);
@@ -5772,7 +6652,7 @@ export default function App() {
         setTaskText("Видалення слідів: помилка");
       }
     } catch (e) {
-      appendLog(`[ПОМИЛКА] wipe usage traces: ${e}\n`);
+      appendLog(`${tr("[ПОМИЛКА] wipe usage traces: {error}", { error: String(e) })}\n`);
       setTaskText(String(e));
     } finally {
       setWipeBusy(false);
@@ -5886,14 +6766,14 @@ export default function App() {
     },
     openrouter: {
       host: openrouterHost || "https://openrouter.ai/api/v1",
-      model: openrouterModel || "meta-llama/llama-3.3-70b-instruct",
+      model: openrouterModel || "qwen/qwen3-30b-a3b-instruct-2507",
       api_key: openrouterApiKey || "",
     },
   });
 
   const cloudHeaderModelId = cloudProvider === "openrouter" ? openrouterModel : cloudModel;
   const cloudHeaderModelShort = formatCloudHeaderModelShort(cloudHeaderModelId);
-  const cloudHeaderModelFull = formatCloudHeaderModelFull(cloudProvider, cloudHeaderModelId);
+  const cloudHeaderModelFull = formatCloudHeaderModelFull(cloudProvider, cloudHeaderModelId, tr);
 
   const handleCloudSwitch = (nextCloudMode) => {
     if (nextCloudMode) {
@@ -5931,7 +6811,7 @@ export default function App() {
         return;
       }
     } catch (e) {
-      appendLog(`[ПОМИЛКА] Валідація: ${e}\n`);
+      appendLog(`${tr("[ПОМИЛКА] Валідація: {error}", { error: String(e) })}\n`);
       setStatusText("Помилка");
       setTaskText(String(e));
       startInFlightRef.current = false;
@@ -5994,7 +6874,12 @@ export default function App() {
         Math.floor((Date.now() - (runStartedAtRef.current || Date.now())) / 1000)
       );
       setElapsedSec(finalSec);
-      appendLog(`[INFO] Тривалість пайплайну: ${finalSec} с (${formatDurationClock(finalSec)})\n`);
+      appendLog(
+        `${tr("[INFO] Тривалість пайплайну: {sec} с ({clock})", {
+          sec: finalSec,
+          clock: formatDurationClock(finalSec, tr),
+        })}\n`
+      );
       setIsRunning(false);
       startInFlightRef.current = false;
       setTimeout(() => setProgress({ cur: 0, total: 0 }), 2500);
@@ -6082,8 +6967,8 @@ export default function App() {
         applyDeepResearchSessionOutputPaths(res.dir);
         setDeepResearchActive(true);
         setDeepResearchOpen(false);
-        appendLog(`[DEEP] Режим глибокого дослідження: папка декларацій → ${res.dir}\n`);
-        setTaskText(`Deep research: у черзі ${res.saved ?? 0} декларацій (запустіть пайплайн).`);
+        appendLog(`${tr("[DEEP] Режим глибокого дослідження: папка декларацій → {dir}", { dir: res.dir })}\n`);
+        setTaskText(tr("Deep research: у черзі {n} декларацій (запустіть пайплайн).", { n: res.saved ?? 0 }));
         await refreshDeepResearchFolders();
       } else {
         const errMsg = (res && res.errors && res.errors.join(" ")) || "Невідома помилка завантаження.";
@@ -6117,8 +7002,10 @@ export default function App() {
         applyDeepResearchSessionOutputPaths(res.dir);
         setDeepResearchActive(true);
         setDeepResearchOpen(false);
-        appendLog(`[DEEP] У черзі ${res.saved ?? 0} декларацій з папки «${name}» (без завантаження).\n`);
-        setTaskText(`Deep research: «${name}», ${res.saved ?? 0} файл(ів). Запустіть пайплайн.`);
+        appendLog(
+          `${tr("[DEEP] У черзі {n} декларацій з папки «{name}» (без завантаження).", { n: res.saved ?? 0, name })}\n`
+        );
+        setTaskText(tr("Deep research: «{name}», {n} файл(ів). Запустіть пайплайн.", { name, n: res.saved ?? 0 }));
       } else {
         const errMsg = (res && res.errors && res.errors.join(" ")) || "Не вдалося застосувати папку.";
         setDeepResearchError(errMsg);
@@ -6130,6 +7017,29 @@ export default function App() {
       setDeepResearchLoadingHint("");
     }
   };
+
+  const openBulkRandomSettings = useCallback(() => {
+    setParseBulkRandomSettingsDraft(normalizeNazkBulkRandomSettings(parseBulkRandomSettings));
+    setParseBulkRandomSettingsOpen(true);
+  }, [parseBulkRandomSettings]);
+
+  const saveBulkRandomSettings = useCallback(async () => {
+    const next = normalizeNazkBulkRandomSettings(parseBulkRandomSettingsDraft);
+    setParseBulkRandomSettings(next);
+    setParseBulkRandomSettingsOpen(false);
+    try {
+      if (api()) {
+        await api().save_settings({
+          nazk_bulk_random_mode: next.mode,
+          nazk_bulk_random_pool_cap: next.poolCap,
+          nazk_bulk_random_pages_cap: next.pagesCap,
+          nazk_bulk_random_pages_count: next.randomPagesCount,
+        });
+      }
+    } catch (err) {
+      console.error("save nazk bulk random settings:", err);
+    }
+  }, [parseBulkRandomSettingsDraft]);
 
   const handleParseSingleDeclaration = async () => {
     if (!api() || parseLoading) return;
@@ -6151,12 +7061,16 @@ export default function App() {
       const res = typeof raw === "string" ? JSON.parse(raw) : raw;
       if (res && res.ok) {
         const skipped =
-          res.skipped_existing != null ? `, пропущено (вже є): ${res.skipped_existing}` : "";
+          res.skipped_existing != null ? tr(", пропущено (вже є): {n}", { n: res.skipped_existing }) : "";
         const savedN = res.new_saved != null ? res.new_saved : 1;
         appendLog(
-          `[NAZK] (id) збережено нових декларацій: ${savedN}${skipped}. Папка: ${res.dir || dir}\n`
+          `${tr("[NAZK] (id) збережено нових декларацій: {n}{skipped}. Папка: {dir}", {
+            n: savedN,
+            skipped,
+            dir: res.dir || dir,
+          })}\n`
         );
-        setTaskText(`Парсинг: збережено ${savedN} файл(ів).`);
+        setTaskText(tr("Парсинг: збережено {n} файл(ів).", { n: savedN }));
         setParseModalOpen(false);
         setParseDeclId("");
       } else {
@@ -6187,7 +7101,7 @@ export default function App() {
       return;
     }
     if (parseBulkUseYear && (Number.isNaN(y) || y < 2015 || y > yMax)) {
-      setParseError(`Рік має бути від 2015 до ${yMax}.`);
+      setParseError(tr("Рік має бути від 2015 до {max}.", { max: yMax }));
       return;
     }
     if (q && q.length < 3) {
@@ -6206,6 +7120,10 @@ export default function App() {
       setParseError("Максимум 500 декларацій за один запуск.");
       return;
     }
+    if (parseBulkRandom && !parseBulkUseYear) {
+      setParseError("Випадкова вибірка доступна лише при увімкненому фільтрі року.");
+      return;
+    }
     const yearArg = parseBulkUseYear ? y : -1;
     setParseLoading(true);
     setParseError("");
@@ -6214,22 +7132,53 @@ export default function App() {
     try {
       const declType = parseInt(String(parseBulkDeclarationType || "").trim(), 10) || 0;
       const docType = parseInt(String(parseBulkDocumentType || "").trim(), 10) || 0;
-      const raw = await api().nazk_download_by_year(yearArg, n, dir, q, declType, docType);
+      const raw = await api().nazk_download_by_year(
+        yearArg,
+        n,
+        dir,
+        q,
+        declType,
+        docType,
+        parseBulkRandom,
+        parseBulkRandom ? nazkBulkRandomOptionsPayload(parseBulkRandomSettings) : null
+      );
       const res = typeof raw === "string" ? JSON.parse(raw) : raw;
       if (res && res.ok) {
-        const skipped = res.skipped_existing != null ? `, пропущено (вже є): ${res.skipped_existing}` : "";
+        const skipped =
+          res.skipped_existing != null ? tr(", пропущено (вже є): {n}", { n: res.skipped_existing }) : "";
+        const randomBit =
+          res.random_sample && res.eligible_count != null
+            ? tr(", випадкова вибірка ({mode}): {saved} з {eligible} кандидатів", {
+                mode: tr(nazkBulkRandomModeLabel(res.random_mode || parseBulkRandomSettings.mode)),
+                saved: res.new_saved,
+                eligible: res.eligible_count,
+              })
+            : parseBulkRandom
+              ? tr(", випадкова вибірка ({mode})", { mode: tr(nazkBulkRandomModeLabel(parseBulkRandomSettings.mode)) })
+              : "";
         const filterBits = [
-          parseBulkUseYear ? `рік ${y}` : null,
-          q ? "пошук" : null,
+          parseBulkUseYear ? tr("рік {year}", { year: y }) : null,
+          q ? tr("пошук") : null,
           nazkFilterOptionLabel(NAZK_DECLARATION_TYPE_OPTIONS, parseBulkDeclarationType),
           nazkFilterOptionLabel(NAZK_DOCUMENT_TYPE_OPTIONS, parseBulkDocumentType),
         ]
           .filter(Boolean)
+          .map((bit) => tr(bit))
           .join(", ");
         appendLog(
-          `[NAZK] (${filterBits}) збережено нових декларацій: ${res.new_saved}${skipped}. Папка: ${res.dir || dir}\n`
+          `${tr("[NAZK] ({filters}) збережено нових декларацій: {n}{skipped}{random}. Папка: {dir}", {
+            filters: filterBits,
+            n: res.new_saved,
+            skipped,
+            random: randomBit,
+            dir: res.dir || dir,
+          })}\n`
         );
-        setTaskText(`Множинний парсинг: збережено ${res.new_saved} файл(ів).`);
+        setTaskText(
+          parseBulkRandom
+            ? tr("Множинний парсинг (випадково): збережено {n} файл(ів).", { n: res.new_saved })
+            : tr("Множинний парсинг: збережено {n} файл(ів).", { n: res.new_saved })
+        );
         setParseModalOpen(false);
       } else {
         const errMsg =
@@ -6260,6 +7209,7 @@ export default function App() {
     setParseDeclId("");
     setParseTab("bulk");
     setParseBulkDir(inputDir);
+    setParseBulkRandom(false);
     setParseModalOpen(true);
   }, [dismissWelcomeModal, inputDir]);
 
@@ -6284,11 +7234,11 @@ export default function App() {
     if (cloudMode) {
       const prov = cloudProvider === "openrouter" ? "openrouter" : "ollama";
       const m = cloudProvider === "openrouter" ? openrouterModel : cloudModel;
-      return formatCloudHeaderModelFull(prov, m);
+      return formatCloudHeaderModelFull(prov, m, tr);
     }
     const m = String(model || "").trim();
     return m ? `ollama: ${m}` : "";
-  }, [cloudMode, cloudProvider, openrouterModel, cloudModel, model]);
+  }, [cloudMode, cloudProvider, openrouterModel, cloudModel, model, tr]);
 
   const hasLogSession = logLines.length > 0 || visualEntries.length > 0;
 
@@ -6319,7 +7269,7 @@ export default function App() {
       }
       setTaskText("Лог скопійовано в буфер обміну");
     } catch (e) {
-      setTaskText(`Не вдалося скопіювати лог: ${e}`);
+      setTaskText(tr("Не вдалося скопіювати лог: {error}", { error: String(e) }));
     }
   };
 
@@ -6330,15 +7280,15 @@ export default function App() {
       const raw = await api().open_report_table(inputDir, tableHtml, deepResearchActive);
       const res = typeof raw === "string" ? JSON.parse(raw) : raw;
       if (res && res.ok) {
-        appendLog(`[INFO] Відкрито звіт: ${res.path}\n`);
+        appendLog(`${tr("[INFO] Відкрито звіт: {path}", { path: res.path })}\n`);
       } else {
-        const errMsg = (res && res.errors && res.errors.join(" ")) || "Не вдалося відкрити report_table.html.";
-        appendLog(`[ПОМИЛКА] ${errMsg}\n`);
+        const errMsg = tr((res && res.errors && res.errors.join(" ")) || "Не вдалося відкрити report_table.html.");
+        appendLog(`${tr("[ПОМИЛКА] {error}", { error: errMsg })}\n`);
         setTaskText(errMsg);
       }
     } catch (e) {
       const msg = String(e);
-      appendLog(`[ПОМИЛКА] Відкриття звіту: ${msg}\n`);
+      appendLog(`${tr("[ПОМИЛКА] Відкриття звіту: {error}", { error: msg })}\n`);
       setTaskText(msg);
     }
   };
@@ -6481,7 +7431,7 @@ export default function App() {
         <div className="header-right">
           {runTimerVisible && (
             <span className={`run-timer ${runTimerExiting ? "is-leaving" : "is-entering"}`}>
-              {formatDurationClock(elapsedSec)}
+              {formatDurationClock(elapsedSec, tr)}
             </span>
           )}
           <span className="status-pill-wrap">
@@ -6598,6 +7548,8 @@ export default function App() {
                       setSelectedFiles([]);
                       setSortDropdownOpen(false);
                     }}
+                    jevScoredCount={Object.keys(jevScores).length}
+                    jevTotalCount={availableFiles.length}
                   />
                   <TooltipWrap tip={SIDEBAR_TOOLTIPS.queueFolder}>
                     <button
@@ -6737,6 +7689,7 @@ export default function App() {
                       setParseDeclId("");
                       setParseTab("single");
                       setParseBulkDir(inputDir);
+                      setParseBulkRandom(false);
                       setParseModalOpen(true);
                     }}
                     disabled={!ready || isRunning || parseLoading}
@@ -6773,24 +7726,102 @@ export default function App() {
             >
               <div className="adv-content-inner">
                 <div className="compact-mode-field">
-                  <Toggle
-                    label={compactLegacyPayload ? "Детальніше" : "Економніше"}
-                    tooltip={
-                      compactLegacyPayload
-                        ? SIDEBAR_TOOLTIPS.compactDetailed
-                        : SIDEBAR_TOOLTIPS.compactEconomical
-                    }
-                    checked={compactLegacyPayload}
-                    onChange={setCompactLegacyPayload}
-                  />
-                  <button
-                    type="button"
-                    className="welcome-help-btn compact-mode-help-trigger"
-                    aria-label="Пояснення режимів компактизації"
-                    onClick={() => setCompactModeHelpOpen(true)}
-                  >
-                    ?
-                  </button>
+                  <div className="compact-mode-block">
+                    <div className="compact-mode-block__head">
+                      <span className="compact-mode-block__title">Компактизація</span>
+                      <button
+                        type="button"
+                        className="welcome-help-btn compact-mode-help-trigger"
+                        aria-label="Пояснення режимів компактизації"
+                        onClick={() => setCompactModeHelpOpen(true)}
+                      >
+                        ?
+                      </button>
+                    </div>
+                    <CompactAxisSegment
+                      label="Формат"
+                      ariaLabel="Формат компактного payload"
+                      value={compactFormat}
+                      onChange={setCompactFormat}
+                      options={[
+                        {
+                          value: "v2",
+                          label: "Compact v2",
+                          tooltip: SIDEBAR_TOOLTIPS.compactFormatV2,
+                        },
+                        {
+                          value: "v3",
+                          label: "Compact v3",
+                          badge: "експерим.",
+                          tooltip: SIDEBAR_TOOLTIPS.compactFormatV3,
+                        },
+                      ]}
+                    />
+                    <CompactAxisSegment
+                      label="Глибина"
+                      ariaLabel="Глибина компактного payload"
+                      value={compactLegacyPayload ? "raw" : "compact"}
+                      onChange={(v) => setCompactLegacyPayload(v === "raw")}
+                      options={[
+                        {
+                          value: "compact",
+                          label: "Лише компакт",
+                          tooltip: SIDEBAR_TOOLTIPS.compactEconomical,
+                        },
+                        {
+                          value: "raw",
+                          label: "+ raw кроки",
+                          tooltip: SIDEBAR_TOOLTIPS.compactDetailed,
+                        },
+                      ]}
+                    />
+                    {compactFormat === "v3" ? (
+                      <div className="compact-v3-options">
+                        <p className="compact-v3-options__note">
+                          У v3 однотипні масиви завжди пакуються в колонкову STRICT-форму
+                          (<code className="deep-research-code">{" {_cols, _rows}"}</code>.
+                        </p>
+                        <Toggle
+                          label="Minify JSON"
+                          tooltip={SIDEBAR_TOOLTIPS.compactMinify}
+                          checked={compactMinify}
+                          onChange={setCompactMinify}
+                          compact
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="compact-mode-field">
+                  <div className="compact-mode-block">
+                    <div className="compact-mode-block__head">
+                      <span className="compact-mode-block__title">Jev-підказка LLM</span>
+                      <span className="compact-axis__badge">експерим.</span>
+                    </div>
+                    <Toggle
+                      label="Додати попередню оцінку Jev у промпт перед аналізом"
+                      tooltip={SIDEBAR_TOOLTIPS.jevHintEnabled}
+                      checked={jevHintEnabled}
+                      onChange={setJevHintEnabled}
+                      compact
+                    />
+                  </div>
+                </div>
+
+                <div className="compact-mode-field">
+                  <div className="compact-mode-block">
+                    <div className="compact-mode-block__head">
+                      <span className="compact-mode-block__title">Jev-перевірка фактів</span>
+                    </div>
+                    <Toggle
+                      label="Позначати знахідки, чиї факти не збігаються з декларацією"
+                      tooltip={SIDEBAR_TOOLTIPS.jevVerifyEnabled}
+                      checked={jevVerifyEnabled}
+                      onChange={setJevVerifyEnabled}
+                      compact
+                    />
+                  </div>
                 </div>
 
                 <div className="adv-settings-launch">
@@ -6937,7 +7968,7 @@ export default function App() {
                   />
                   <p className="dossier-debug-hint">
                     Зберігає повні артефакти обробки по кожній декларації у кейс-папки. Стандартний
-                    шлях: <code>audit</code> (відносно кореня проєкту).
+                    шлях: <code>audit</code> (відносно теки з даними).
                   </p>
                   <button
                     type="button"
@@ -7289,7 +8320,7 @@ export default function App() {
                   <span className="progress-label">
                     {progress.total > 0
                       ? (!isRunning
-                          ? `Готово: ${progress.cur} / ${progress.total} (${pct}%)`
+                          ? tr("Готово: {cur} / {total} ({pct}%)", { cur: progress.cur, total: progress.total, pct })
                           : `${progress.cur} / ${progress.total} (${pct}%)`)
                       : "Обробка..."}
                   </span>
@@ -7324,6 +8355,8 @@ export default function App() {
           modelListError={modelListError}
           pipelineMaxConcurrent={pipelineMaxConcurrent}
           onPipelineMaxConcurrentChange={setPipelineMaxConcurrent}
+          mergeReplicateCount={mergeReplicateCount}
+          onMergeReplicateCountChange={setMergeReplicateCount}
           onOpenComparison={({ provider, host, api_key }) => {
             const seedProvider = provider === "openrouter" ? "openrouter" : "ollama";
             const currentModel =
@@ -7360,7 +8393,7 @@ export default function App() {
             setCloudModel((o.model || "").trim());
             setCloudApiKey((o.api_key || "").trim());
             setOpenrouterHost((r.host || "").trim() || "https://openrouter.ai/api/v1");
-            setOpenrouterModel((r.model || "").trim() || "meta-llama/llama-3.3-70b-instruct");
+            setOpenrouterModel((r.model || "").trim() || "qwen/qwen3-30b-a3b-instruct-2507");
             setOpenrouterApiKey((r.api_key || "").trim());
             setCloudProvider(nextProvider);
             setCloudMode(true);
@@ -7401,7 +8434,7 @@ export default function App() {
             setCloudComparisonEnabled(clean.length >= 2);
             appendLog(
               clean.length >= 2
-                ? `[COMPARE] Налаштовано моделі: ${clean.join(" | ")}. Запуск через кнопку «Запустити».\n`
+                ? `${tr("[COMPARE] Налаштовано моделі: {models}. Запуск через кнопку «Запустити».", { models: clean.join(" | ") })}\n`
                 : "[COMPARE] Режим порівняння вимкнено.\n"
             );
           }}
@@ -7464,6 +8497,11 @@ export default function App() {
           draftSelectedCount={filePickerDraftEffective.size}
           onOverlayMouseDown={() => setFilePickerOpen(false)}
           onOpenDeclarationsFolder={openDeclarationsFolder}
+          jevScores={jevScores}
+          jevLoading={jevLoading}
+          jevError={jevError}
+          jevProgress={jevProgress}
+          onScoreJev={handleScoreJev}
         />
       </AnimatedModalPresence>
       {/* DEEP_RESEARCH */}
@@ -7512,6 +8550,8 @@ export default function App() {
           onSaveVersion={savePromptVersion}
           onRenameVersion={renamePromptVersion}
           onDeleteVersion={deletePromptVersion}
+          jevBuiltinName={jevBuiltinName()}
+          pairBuiltinName={pairBuiltinName()}
         />
       </AnimatedModalPresence>
       <AnimatedModalPresence when={aboutProgramOpen}>
@@ -7540,13 +8580,20 @@ export default function App() {
           onChangeId={setParseDeclId}
           bulkYear={parseBulkYear}
           bulkUseYear={parseBulkUseYear}
-          onChangeBulkUseYear={setParseBulkUseYear}
+          onChangeBulkUseYear={(next) => {
+            setParseBulkUseYear(next);
+            if (!next) setParseBulkRandom(false);
+          }}
           bulkQuery={parseBulkQuery}
           onChangeBulkQuery={setParseBulkQuery}
           bulkCount={parseBulkCount}
           bulkDeclarationType={parseBulkDeclarationType}
           bulkDocumentType={parseBulkDocumentType}
           bulkTargetDir={parseBulkDir}
+          bulkRandom={parseBulkRandom}
+          onChangeBulkRandom={setParseBulkRandom}
+          bulkRandomSettings={parseBulkRandomSettings}
+          onOpenBulkRandomSettings={openBulkRandomSettings}
           onChangeBulkYear={setParseBulkYear}
           onChangeBulkCount={setParseBulkCount}
           onChangeBulkDeclarationType={setParseBulkDeclarationType}
@@ -7559,6 +8606,16 @@ export default function App() {
           onCancel={() => !parseLoading && setParseModalOpen(false)}
           onSubmitSingle={handleParseSingleDeclaration}
           onSubmitBulk={handleParseBulkByYear}
+        />
+      </AnimatedModalPresence>
+      <AnimatedModalPresence when={parseBulkRandomSettingsOpen}>
+        <ParseBulkRandomSettingsModal
+          settings={parseBulkRandomSettingsDraft}
+          onChange={setParseBulkRandomSettingsDraft}
+          onClose={() => setParseBulkRandomSettingsOpen(false)}
+          onSave={() => {
+            void saveBulkRandomSettings();
+          }}
         />
       </AnimatedModalPresence>
       <AnimatedModalPresence when={wipeModalOpen}>

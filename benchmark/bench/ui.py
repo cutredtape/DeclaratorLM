@@ -122,7 +122,7 @@ def ask_models_interactive(
             "Формат: [cyan]model_id[/]   або   [cyan]provider:model_id[/]\n"
             "Приклади:\n"
             "  llama3.1\n"
-            "  openrouter:meta-llama/llama-3.3-70b-instruct\n"
+            "  openrouter:qwen/qwen3-30b-a3b-instruct-2507\n"
             "Порожній рядок завершує список.",
             title="Моделі",
             border_style="blue",

@@ -48,7 +48,10 @@ import hashlib
 import json
 import os
 import queue
+import re
+import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -70,15 +73,69 @@ def _app_bundle_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
+DATA_DIR_NAME = "DeclaratorLM-data"
+# Старі збірки exe писали все прямо поруч із собою (Завантаження, Робочий стіл…).
+# При першому запуску нової збірки переносимо ці файли в теку даних.
+_LEGACY_ROOT_ENTRIES = (
+    "settings.json",
+    ".declarator_secrets.json",
+    ".jev_catalog_cache",
+    "analysis_results.jsonl",
+    "analysis_errors.jsonl",
+    "report_summary.csv",
+    "report_findings.csv",
+    "report_table.html",
+    "dataset_declarations",
+    "dataset_declarations_done",
+    "deep_research",
+    "audit",
+    "compare",
+    "оброблені декларації",
+)
+
+
+def _migrate_legacy_files(exe_dir: Path, data_dir: Path) -> None:
+    for name in _LEGACY_ROOT_ENTRIES:
+        src, dst = exe_dir / name, data_dir / name
+        if src.exists() and not dst.exists():
+            try:
+                shutil.move(str(src), str(dst))
+            except OSError:
+                pass  # не вдалось — лишаємо на місці, нічого не губимо
+
+
 def _app_root_dir() -> Path:
-    """Persistent "project root": next to the .exe when frozen; in dev — the webview_app.py directory."""
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
+    """Корінь даних: налаштування, ключі, декларації, звіти, кеші.
+
+    exe — одна тека `DeclaratorLM-data` поруч із .exe, щоб застосунок не розкидав
+    файли довкола себе; якщо там писати не можна (Program Files) —
+    %LOCALAPPDATA%\\DeclaratorLM. Розробка — корінь репозиторію (усе в .gitignore).
+    DECLARATOR_DATA_DIR перевизначає обидва варіанти."""
+    override = os.environ.get("DECLARATOR_DATA_DIR", "").strip()
+    if override:
+        root = Path(override).expanduser().resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+    if not getattr(sys, "frozen", False):
+        return Path(__file__).resolve().parent
+    exe_dir = Path(sys.executable).resolve().parent
+    root = exe_dir / DATA_DIR_NAME
+    try:
+        root.mkdir(exist_ok=True)
+    except OSError:
+        root = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "DeclaratorLM"
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+    _migrate_legacy_files(exe_dir, root)
+    return root
 
 
 BUNDLE_DIR = _app_bundle_dir()
 BASE_DIR = _app_root_dir()
+# main.py і report.py (підпроцеси) рахують відносні шляхи, deep_research/ і ключі
+# від цього ж кореня, а не від власного файлу: в exe той лежить у тимчасовій теці
+# розпакування, що зникає після закриття.
+os.environ["DECLARATOR_DATA_DIR"] = str(BASE_DIR)
 MAIN_SCRIPT = BUNDLE_DIR / "main.py"
 REPORT_SCRIPT = BUNDLE_DIR / "report.py"
 SETTINGS_FILE = BASE_DIR / "settings.json"
@@ -86,19 +143,99 @@ SECRETS_FILE = BASE_DIR / ".declarator_secrets.json"
 _SECRET_SETTINGS_KEYS = frozenset({"openrouter_api_key", "cloud_api_key"})
 CONTROL_FILE = BASE_DIR / ".run_control.json"
 SESSION_PROMPT_OVERRIDES_FILE = BASE_DIR / ".debug_session_prompt_overrides.json"
+# Окремий файл, не ключ у SESSION_PROMPT_OVERRIDES_FILE: --jev-questions у main.py —
+# самостійний шлях до файлу, не частина --prompt-overrides. Пишеться одразу при
+# Apply у редакторі, а не лениво при наступному прогоні пайплайну (як pipeline/
+# dossier): jev_score_catalog — окрема кнопка в модалці «Каталог», що ніколи не
+# проходить через _run_pipeline_impl/gatherArgs, тож лінивий запис тут не спрацював би.
+SESSION_JEV_QUESTIONS_FILE = BASE_DIR / ".debug_session_jev_questions.json"
+# Те саме для pairframe (зміни між роками в досьє): пишеться одразу при Apply.
+SESSION_PAIR_QUESTIONS_FILE = BASE_DIR / ".debug_session_pair_questions.json"
 DIST_DIR = BUNDLE_DIR / "declarator-lm" / "dist"
 APP_HTTP_USER_AGENT = "DeclaratorLM/0.70 (+https://console.groq.com)"
+# Каталог-сортування за Jev (див. docs/JEV.md §3.1): робочий набір питань coreframe-13.
+# Кеш живе поруч із exe (як settings.json), а не в папці декларацій — щоб
+# нічого не дописувати в довільну папку користувача.
+JEV_CATALOG_QUESTIONS = BUNDLE_DIR / "jev" / "questions" / "coreframe-13.json"
+# Зміни між сусідніми роками в досьє (docs/JEV.md §3.5): лінія pairframe-N, окрема від coreframe.
+DOSSIER_PAIR_QUESTIONS = BUNDLE_DIR / "jev" / "questions" / "pairframe-3.json"
+JEV_CATALOG_CACHE_DIR = BASE_DIR / ".jev_catalog_cache"
+# Той самий тег, що main.py вже друкує в stdout на кожен файл: "[3/1200] OK ...".
+_JEV_PROGRESS_TAG_RE = re.compile(r"^\[(\d+)/(\d+)\]")
+
+
+def _active_jev_questions_path() -> Path:
+    """Сесійний override (редактор DEBUG, вкладка Jev), якщо є, інакше вбудований файл."""
+    if SESSION_JEV_QUESTIONS_FILE.is_file():
+        return SESSION_JEV_QUESTIONS_FILE
+    return JEV_CATALOG_QUESTIONS
+
+
+def _active_pair_questions_path() -> Path:
+    """Сесійний override pairframe (редактор DEBUG), якщо є, інакше вбудований файл."""
+    if SESSION_PAIR_QUESTIONS_FILE.is_file():
+        return SESSION_PAIR_QUESTIONS_FILE
+    return DOSSIER_PAIR_QUESTIONS
+
+
+def _remove_session_jev_files() -> None:
+    """Сесійні набори питань Jev живуть лише до закриття застосунку: інакше після
+    перезапуску каталог і досьє тихо брали б старий override, хоча редактор
+    показує вбудований набір."""
+    for f in (SESSION_JEV_QUESTIONS_FILE, SESSION_PAIR_QUESTIONS_FILE):
+        try:
+            if f.is_file():
+                f.unlink()
+        except OSError:
+            pass
+
+
+def _jev_cache_file_for_dir(p: Path, qset_path: Path) -> Path:
+    # mtime+розмір набору питань — у ключі кешу: інакше перемикання сесійного
+    # override (інші пороги/питання) тихо повернуло б бали, пораховані під
+    # СТАРИМ конфігом, як "уже пораховано" для тих самих файлів декларацій.
+    try:
+        qst = qset_path.stat()
+        qset_tag = f"{qst.st_mtime}:{qst.st_size}"
+    except OSError:
+        qset_tag = "missing"
+    cache_key = hashlib.sha1(
+        f"{p.resolve()}|{qset_path.resolve()}|{qset_tag}".encode("utf-8")
+    ).hexdigest()[:16]
+    return JEV_CATALOG_CACHE_DIR / f"{cache_key}.json"
+
+
+def _jev_load_cache(cache_file: Path) -> dict:
+    if not cache_file.is_file():
+        return {}
+    try:
+        return json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _jev_current_file_meta(p: Path) -> dict[str, dict]:
+    current: dict[str, dict] = {}
+    for fp in sorted(p.glob("*.json")):
+        try:
+            st = fp.stat()
+        except OSError:
+            continue
+        current[fp.name] = {"mtime": st.st_mtime, "size": int(st.st_size)}
+    return current
+
+
+_SCRIPT_BY_JOB = {"main": MAIN_SCRIPT, "report": REPORT_SCRIPT}
 
 
 def _subprocess_script_argv(job: str, tail: list[str]) -> list[str]:
     """Arguments to launch main.py / report.py (frozen → no .py path after the exe)."""
-    if job not in ("main", "report"):
+    if job not in _SCRIPT_BY_JOB:
         raise ValueError(job)
     if getattr(sys, "frozen", False):
         return [sys.executable, _RUNPY_MARKER, job] + tail
     exe = sys.executable
-    script = MAIN_SCRIPT if job == "main" else REPORT_SCRIPT
-    return [exe, str(script)] + tail
+    return [exe, str(_SCRIPT_BY_JOB[job])] + tail
 
 # Not persisted to settings.json (only for a single run from the frontend).
 _EPHEMERAL_SETTINGS_KEYS = frozenset({
@@ -144,6 +281,11 @@ DEFAULTS = {
     "audit_capture_normalized_analysis": True,
     "audit_capture_attempt_meta": True,
     "compact_legacy_payload": False,
+    "compact_format": "v2",
+    "compact_minify": False,
+    "jev_hint_enabled": False,
+    "jev_verify_enabled": True,
+    "merge_replicate_count": 1,
     "max_files": 1,
     "model": "llama3.1",
     "host": "http://127.0.0.1:11434",
@@ -172,7 +314,7 @@ DEFAULTS = {
     "cloud_api_key": "",
     # Alternative (isolated) OpenRouter path. Does not affect Ollama fields in any way.
     "openrouter_host": "https://openrouter.ai/api/v1",
-    "openrouter_model": "meta-llama/llama-3.3-70b-instruct",
+    "openrouter_model": "qwen/qwen3-30b-a3b-instruct-2507",
     "openrouter_api_key": "",
     "compare_enabled": False,
     "compare_count": 2,
@@ -180,6 +322,10 @@ DEFAULTS = {
     "welcome_modal_seen": False,
     "show_header_taglines": True,
     "pipeline_max_concurrent": 1,
+    "nazk_bulk_random_mode": "pool_cap",
+    "nazk_bulk_random_pool_cap": 500,
+    "nazk_bulk_random_pages_cap": 15,
+    "nazk_bulk_random_pages_count": 5,
 }
 
 DEEP_PATH_KEYS = {
@@ -207,6 +353,18 @@ def _atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> Non
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(text, encoding=encoding)
     os.replace(tmp, path)
+
+
+def _cached_dossier_timeline(input_dir_arg: str) -> str:
+    """Хронологія змін досьє з кешу dossier_changes.json — без викликів Jev."""
+    if not _is_under_deep_research(input_dir_arg):
+        return ""
+    in_path = _resolve_input_dir_path(input_dir_arg)
+    if in_path is None:
+        return ""
+    from dossier import changes as dossier_changes
+
+    return dossier_changes.timeline_text(dossier_changes.load_cached(in_path) or {})
 
 
 def _safe_user_path(raw: str) -> Path | None:
@@ -607,6 +765,8 @@ WIPE_RUNTIME_ROOT_FILES = (
     f"{SETTINGS_FILE.name}.tmp",
     CONTROL_FILE.name,
     SESSION_PROMPT_OVERRIDES_FILE.name,
+    SESSION_JEV_QUESTIONS_FILE.name,
+    SESSION_PAIR_QUESTIONS_FILE.name,
     DEFAULTS["output_jsonl"],
     DEFAULTS["errors_jsonl"],
     DEFAULTS["summary_csv"],
@@ -742,6 +902,7 @@ class Api:
         self._lock = threading.Lock()
         self._is_running = False
         self._debug_ui_mode: bool = _DEBUG_UI_MODE_FROM_ENV
+        _remove_session_jev_files()
 
     def set_window(self, window: webview.Window) -> None:
         self._window = window
@@ -751,6 +912,12 @@ class Api:
             return
         escaped = json.dumps(line)
         self._window.evaluate_js(f"window._onLogLine({escaped})")
+
+    def _emit_jev_catalog_progress(self, done: int, total: int) -> None:
+        if self._window is None:
+            return
+        payload = json.dumps({"done": done, "total": total})
+        self._window.evaluate_js(f"window._onJevCatalogProgress && window._onJevCatalogProgress({payload})")
 
     # ── Settings ──────────────────────────────────────────────
 
@@ -1075,18 +1242,63 @@ class Api:
 
     def get_builtin_prompts(self) -> dict:
         """Built-in prompt texts (for the debug UI editor; does not modify project files)."""
-        from dossier_html_summary import (
+        from dossier.summary import (
             DOSSIER_SYSTEM_PROMPT,
             DOSSIER_USER_PROMPT_TEMPLATE,
         )
         from main import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+
+        try:
+            jev_questions = JEV_CATALOG_QUESTIONS.read_text(encoding="utf-8")
+        except OSError:
+            jev_questions = ""
+        try:
+            pair_questions = DOSSIER_PAIR_QUESTIONS.read_text(encoding="utf-8")
+        except OSError:
+            pair_questions = ""
 
         return {
             "pipeline_system_prompt": SYSTEM_PROMPT,
             "pipeline_user_prompt_template": USER_PROMPT_TEMPLATE,
             "dossier_system_prompt": DOSSIER_SYSTEM_PROMPT,
             "dossier_user_prompt_template": DOSSIER_USER_PROMPT_TEMPLATE,
+            "jev_questions": jev_questions,
+            "pair_questions": pair_questions,
         }
+
+    def set_session_jev_questions(self, text: str) -> dict:
+        """Записує/очищує сесійний override Jev-конфігу одразу (не лениво).
+
+        На відміну від pipeline/dossier — jev_score_catalog викликається окремою
+        кнопкою в модалці «Каталог», а не через gatherArgs/_run_pipeline_impl,
+        тож лінивий запис "при наступному прогоні" не спрацював би для неї.
+        """
+        return self._set_session_questions_file(SESSION_JEV_QUESTIONS_FILE, text)
+
+    def set_session_pair_questions(self, text: str) -> dict:
+        """Сесійний override pairframe (зміни між роками в досьє) — одразу на диск.
+        Порожній текст повертає вбудований набір."""
+        return self._set_session_questions_file(SESSION_PAIR_QUESTIONS_FILE, text)
+
+    @staticmethod
+    def _set_session_questions_file(target: Path, text: str) -> dict:
+        val = str(text or "").strip()
+        if not val:
+            try:
+                if target.is_file():
+                    target.unlink()
+            except OSError as exc:
+                return {"ok": False, "errors": [str(exc)]}
+            return {"ok": True, "errors": []}
+        try:
+            json.loads(val)
+        except json.JSONDecodeError as exc:
+            return {"ok": False, "errors": [f"Некоректний JSON: {exc}"]}
+        try:
+            target.write_text(val, encoding="utf-8")
+        except OSError as exc:
+            return {"ok": False, "errors": [str(exc)]}
+        return {"ok": True, "errors": []}
 
     def _write_session_prompt_overrides(self, args: dict) -> str | None:
         """Returns the path to the JSON, or None if there are no overrides."""
@@ -1453,6 +1665,180 @@ class Api:
             )
         return {"ok": True, "errors": [], "files": files_out}
 
+    def jev_cached_scores(self, input_dir: str) -> dict:
+        """Лише читає вже пораховане з диска — без жодного мережевого виклику.
+
+        Викликається автоматично при відкритті каталогу, щоб оцінка не губилась
+        між запусками застосунку (кеш-файл персистентний, а React-стан — ні).
+        """
+        raw = str(input_dir or "").strip()
+        if not raw:
+            return {"ok": True, "errors": [], "scores": {}}
+        p = _safe_user_path(raw)
+        if p is None or not p.is_dir():
+            return {"ok": True, "errors": [], "scores": {}}
+        current = _jev_current_file_meta(p)
+        cached = _jev_load_cache(_jev_cache_file_for_dir(p, _active_jev_questions_path()))
+        scores = {
+            name: cached[name]
+            for name, meta in current.items()
+            if name in cached
+            and cached[name].get("mtime") == meta["mtime"]
+            and cached[name].get("size") == meta["size"]
+        }
+        return {"ok": True, "errors": [], "scores": scores}
+
+    def jev_score_catalog(self, input_dir: str) -> dict:
+        """Jev-оцінка декларацій папки для сортування в каталозі (не пайплайн-аналіз).
+
+        Кожен файл рахується лише раз: результат кешується за іменем + mtime +
+        розміром, тому повторне відкриття каталогу не витрачає запити повторно.
+        Ланцюг питань/чищення стану — coreframe-13 (docs/JEV.md §2.2) за замовчуванням,
+        або сесійний override з вкладки Jev редактора DEBUG, якщо застосований.
+        """
+        raw = str(input_dir or "").strip()
+        if not raw:
+            return {"ok": False, "errors": ["Не вказано папку декларацій."], "scores": {}}
+        p = _safe_user_path(raw)
+        if p is None or not p.is_dir():
+            return {"ok": False, "errors": [f"Каталог не існує: {raw}"], "scores": {}}
+
+        jev_questions_path = _active_jev_questions_path()
+        secrets = _load_secrets_file()
+        api_key = str(secrets.get("openrouter_api_key", "") or "").strip()
+        if not api_key:
+            return {
+                "ok": False,
+                "errors": ["Потрібен ключ OpenRouter (Jev доступний через нього) — додайте його в налаштуваннях."],
+                "scores": {},
+            }
+        if not jev_questions_path.is_file():
+            return {
+                "ok": False,
+                "errors": [f"Не знайдено набір питань Jev: {jev_questions_path}"],
+                "scores": {},
+            }
+
+        current = _jev_current_file_meta(p)
+        if not current:
+            return {"ok": True, "errors": [], "scores": {}}
+
+        try:
+            JEV_CATALOG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        cache_file = _jev_cache_file_for_dir(p, jev_questions_path)
+        cached = _jev_load_cache(cache_file)
+
+        stale = {
+            name: meta
+            for name, meta in current.items()
+            if name not in cached
+            or cached[name].get("mtime") != meta["mtime"]
+            or cached[name].get("size") != meta["size"]
+        }
+
+        errors: list[str] = []
+        if stale:
+            with tempfile.TemporaryDirectory(prefix="jev_catalog_") as tmp_str:
+                tmp = Path(tmp_str)
+                score_dir = tmp / "scored"
+                score_dir.mkdir()
+                for name in stale:
+                    try:
+                        shutil.copy2(p / name, score_dir / name)
+                    except OSError:
+                        continue
+                out_jsonl = tmp / "scores.jsonl"
+                err_jsonl = tmp / "errors.jsonl"
+                cmd = _subprocess_script_argv(
+                    "main",
+                    [
+                        "--input-dir", str(score_dir),
+                        "--output", str(out_jsonl),
+                        "--errors-output", str(err_jsonl),
+                        "--provider", "jev",
+                        "--jev-questions", str(jev_questions_path),
+                        "--jev-api-key", api_key,
+                        "--max-concurrent-declarations", "5",
+                        "--on-limit", "skip",
+                    ],
+                )
+                total = len(stale)
+                self._emit_jev_catalog_progress(0, total)
+                tail_lines: list[str] = []
+                returncode = 1
+                try:
+                    env = dict(os.environ)
+                    env["PYTHONIOENCODING"] = "utf-8"
+                    env["PYTHONUTF8"] = "1"
+                    env["PYTHONUNBUFFERED"] = "1"
+                    proc = subprocess.Popen(
+                        cmd,
+                        cwd=str(BASE_DIR),
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        env=env,
+                    )
+                    assert proc.stdout is not None
+                    done = 0
+                    for raw_line in proc.stdout:
+                        line = raw_line.rstrip("\n")
+                        tail_lines.append(line)
+                        if len(tail_lines) > 15:
+                            tail_lines.pop(0)
+                        m = _JEV_PROGRESS_TAG_RE.match(line)
+                        if m:
+                            done = int(m.group(1))
+                            self._emit_jev_catalog_progress(done, total)
+                    proc.wait(timeout=900)
+                    returncode = proc.returncode
+                    self._emit_jev_catalog_progress(total, total)
+                except (OSError, subprocess.TimeoutExpired) as exc:
+                    return {
+                        "ok": False,
+                        "errors": [f"Не вдалося запустити оцінку Jev: {exc}"],
+                        "scores": {},
+                    }
+                if out_jsonl.exists():
+                    for line in out_jsonl.read_text(encoding="utf-8").splitlines():
+                        if not line.strip():
+                            continue
+                        try:
+                            row = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        name = row.get("source_file")
+                        if not name or name not in stale:
+                            continue
+                        analysis = row.get("analysis") or {}
+                        jev_meta = ((row.get("run_meta") or {}).get("jev")) or {}
+                        main_concern = (
+                            ((jev_meta.get("aux") or {}).get("main_concern") or {}).get("choice")
+                        )
+                        cached[name] = {
+                            **stale[name],
+                            "risk_score": analysis.get("risk_score"),
+                            "main_concern": main_concern,
+                            "computed_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                elif returncode != 0:
+                    tail = "\n".join(tail_lines)
+                    errors.append(f"Оцінка Jev завершилась з помилкою: {tail}")
+            try:
+                cache_file.write_text(
+                    json.dumps(cached, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+            except OSError:
+                pass
+
+        scores = {name: cached[name] for name in current if name in cached}
+        missing = [name for name in current if name not in cached]
+        return {"ok": True, "errors": errors, "scores": scores, "missing": missing}
+
     def debug_run_dossier_html_summary(self, args: dict) -> dict:
         """
         DEBUG UI only: dossier HTML summary without running the full pipeline.
@@ -1463,7 +1849,7 @@ class Api:
         if not bool(args.get("debug_mode_ui")):
             return {
                 "ok": False,
-                "message": "Доступно лише в режимі DEBUG (debug_mode.bat).",
+                "message": "Доступно лише в режимі DEBUG (Shift + 4 кліки на логотип «Д» або DECLARATOR_DEBUG_UI=1).",
             }
         input_dir_arg = str(args.get("input_dir", "") or "").strip()
         if not _is_under_deep_research(input_dir_arg) and not str(
@@ -1516,7 +1902,7 @@ class Api:
         cloud_provider = str(args.get("cloud_provider", "ollama") or "ollama").lower()
         if cloud and cloud_provider == "openrouter":
             provider = "openrouter"
-            model = (str(args.get("openrouter_model") or "").strip() or "meta-llama/llama-3.3-70b-instruct")
+            model = (str(args.get("openrouter_model") or "").strip() or "qwen/qwen3-30b-a3b-instruct-2507")
             host = str(args.get("openrouter_host", "https://openrouter.ai/api/v1"))
             key = str(args.get("openrouter_api_key", "") or "")
         elif cloud:
@@ -1541,7 +1927,7 @@ class Api:
         except (TypeError, ValueError):
             num_predict = -1
 
-        from dossier_html_summary import run_dossier_table_summary_append
+        from dossier.summary import run_dossier_table_summary_append
 
         self._emit_log("\n=== [DEBUG] Підсумок досьє по HTML (без пайплайну) ===\n")
         if _is_under_deep_research(input_dir_arg):
@@ -1560,13 +1946,14 @@ class Api:
             prompt_overrides=dossier_po or None,
             html_source_override=html_override,
             provider=provider,
+            changes_timeline=_cached_dossier_timeline(input_dir_arg),
         )
         return {"ok": ok, "message": msg}
 
     def debug_compare_models_html(self, args: dict) -> dict:
         """DEBUG UI only: run ONE declaration through 2-4 models and gather comparison reports."""
         if not bool(args.get("debug_mode_ui")):
-            return {"ok": False, "message": "Доступно лише в режимі DEBUG (debug_mode.bat)."}
+            return {"ok": False, "message": "Доступно лише в режимі DEBUG (Shift + 4 кліки на логотип «Д» або DECLARATOR_DEBUG_UI=1)."}
         models_raw = args.get("compare_models")
         models: list[str]
         if isinstance(models_raw, list):
@@ -1706,6 +2093,9 @@ class Api:
                 "audit_capture_response_parsed": False,
                 "audit_capture_normalized_analysis": False,
                 "audit_capture_attempt_meta": False,
+                "compact_legacy_payload": bool(args.get("compact_legacy_payload", False)),
+                "compact_format": str(args.get("compact_format", "v2") or "v2"),
+                "compact_minify": bool(args.get("compact_minify", False)),
             }
             ns = SimpleNamespace(**run_args)
             if provider == "openrouter":
@@ -1906,7 +2296,7 @@ class Api:
 
     def get_dossier_chart_data(self, args: dict) -> str:
         """Time series for the dossier charts (deep research)."""
-        from dossier_charts import build_dossier_chart_series
+        from dossier.charts import build_dossier_chart_series
 
         try:
             a = args or {}
@@ -1969,21 +2359,62 @@ class Api:
         except OSError as exc:
             self._emit_log(f"[WARN] Не вдалось зберегти usage_aggregate: {exc}\n")
 
-    def _append_dossier_charts_after_report(self, args: dict, table_html_path: Path) -> None:
-        """Add interactive charts to report_table.html for deep research."""
+    def _dossier_changes(self, args: dict, in_path: Path) -> dict | None:
+        """Зміни між сусідніми роками досьє, оцінені Jev (docs/JEV.md §3.5).
+
+        Лише в режимі OpenRouter: Jev іде через той самий OpenRouter, тож дані
+        не йдуть до хмари, куди користувач їх і так не відправляв. Результат
+        кешується в теці досьє (dossier_changes.json) — повторний звіт не платить."""
+        cloud = bool(args.get("cloud_mode"))
+        provider = str(args.get("cloud_provider", "ollama") or "ollama").lower()
+        if not (cloud and provider == "openrouter"):
+            self._emit_log(
+                "[Досьє/Зміни] Пропущено: оцінка змін між роками йде через Jev "
+                "(OpenRouter) і доступна лише в режимі OpenRouter.\n"
+            )
+            return None
+        api_key = str(args.get("openrouter_api_key", "") or "").strip() or str(
+            _load_secrets_file().get("openrouter_api_key", "") or ""
+        ).strip()
+        if not api_key:
+            self._emit_log("[Досьє/Зміни] Пропущено: немає ключа OpenRouter.\n")
+            return None
+        from dossier import changes as dossier_changes
+
+        self._emit_log("\n=== Зміни між роками (Jev) ===\n")
+        try:
+            result = dossier_changes.analyze_dossier(in_path, api_key, _active_pair_questions_path())
+        except Exception as exc:  # noqa: BLE001 — звіт без розділу, а не зламаний пайплайн
+            self._emit_log(f"[Досьє/Зміни] Не вдалось: {exc}\n")
+            return None
+        pairs = result.get("pairs") or []
+        by_level = {lvl: sum(1 for p in pairs if p.get("level") == lvl) for lvl in ("high", "medium", "low")}
+        src = "з кешу" if result.get("from_cache") else f"{len(pairs)} викликів Jev"
+        self._emit_log(
+            f"[Досьє/Зміни] {len(pairs)} пар сусідніх років ({src}): пріоритет високий — "
+            f"{by_level['high']}, середній — {by_level['medium']}, низький — {by_level['low']}.\n"
+        )
+        return result
+
+    def _append_dossier_charts_after_report(self, args: dict, table_html_path: Path) -> dict | None:
+        """Add interactive charts (+ «Зміни між роками») to report_table.html for deep research.
+
+        Повертає результат змін між роками (або None) — для підсумку досьє."""
         input_dir_arg = str(args.get("input_dir", "") or "").strip()
         if not _is_under_deep_research(input_dir_arg):
-            return
+            return None
         in_path = _resolve_input_dir_path(input_dir_arg)
         if in_path is None:
-            return
+            return None
+        # Спершу зміни: графік читає їхній кеш і малює лінію «Зміни між роками».
+        changes = self._dossier_changes(args, in_path)
         th = table_html_path
         if not th.is_absolute():
             th = (BASE_DIR / th).resolve()
         else:
             th = th.resolve()
         jsonl_p, err_p, _ = _resolve_report_paths_for_extra(args)
-        from dossier_charts_html import append_dossier_charts_to_html
+        from dossier.charts_html import append_dossier_charts_to_html
 
         self._emit_log("\n=== Графіки досьє (HTML) ===\n")
         ok, msg = append_dossier_charts_to_html(
@@ -1997,6 +2428,12 @@ class Api:
         self._emit_log(msg + "\n")
         if not ok:
             self._emit_log("[INFO] HTML-звіт без блоку графіків.\n")
+        if changes and changes.get("pairs") and th.is_file():
+            from dossier.changes import append_section_to_html, render_section_html
+
+            append_section_to_html(th, render_section_html(changes))
+            self._emit_log("[Досьє/Зміни] Розділ «Зміни між роками» додано у звіт.\n")
+        return changes
 
     def run_extra_report(self, args: dict) -> str:
         """Regenerate the CSV and the single HTML report (report_table.html) from the current JSONL."""
@@ -2051,16 +2488,15 @@ class Api:
             ensure_ascii=False,
         )
 
-    def open_extra_report(self, args: dict) -> dict:
-        """Open the main HTML report (the same as report_table.html)."""
-        _jsonl_p, _err_p, table_p = _resolve_report_paths_for_extra(args)
-        target = table_p
-        if not target.exists():
-            return {
-                "ok": False,
-                "errors": [f"Файл не знайдено: {target}"],
-                "path": str(target),
-            }
+    def open_declarations_folder(self, input_dir_arg: str) -> dict:
+        """Open the declarations directory in the system file manager."""
+        target = _resolve_input_dir_path(str(input_dir_arg or ""))
+        if target is None:
+            target = (BASE_DIR / DEFAULTS["input_dir"]).resolve()
+
+        if not target.exists() or not target.is_dir():
+            return {"ok": False, "errors": [f"Папку декларацій не знайдено: {target}"], "path": str(target)}
+
         try:
             if sys.platform == "win32":
                 os.startfile(str(target))  # type: ignore[attr-defined]
@@ -2072,15 +2508,9 @@ class Api:
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "errors": [str(exc)], "path": str(target)}
 
-    def open_declarations_folder(self, input_dir_arg: str) -> dict:
-        """Open the declarations directory in the system file manager."""
-        target = _resolve_input_dir_path(str(input_dir_arg or ""))
-        if target is None:
-            target = (BASE_DIR / DEFAULTS["input_dir"]).resolve()
-
-        if not target.exists() or not target.is_dir():
-            return {"ok": False, "errors": [f"Папку декларацій не знайдено: {target}"], "path": str(target)}
-
+    def open_data_folder(self) -> dict:
+        """Open the data root (settings, declarations, reports, caches) in the file manager."""
+        target = BASE_DIR.resolve()
         try:
             if sys.platform == "win32":
                 os.startfile(str(target))  # type: ignore[attr-defined]
@@ -2514,15 +2944,65 @@ class Api:
 
         if bool(args.get("compact_legacy_payload")):
             main_cmd.append("--compact-legacy-payload")
-            self._emit_log(
-                "[INFO] Режим компактизації: Детальніше (all_nonempty_steps_payload у запиті).\n"
-            )
+        compact_fmt = str(args.get("compact_format", "v2") or "v2").strip().lower()
+        if compact_fmt not in ("v2", "v3"):
+            compact_fmt = "v2"
+        main_cmd.extend(["--compact-format", compact_fmt])
+        want_minify = bool(args.get("compact_minify")) and compact_fmt == "v3"
+        if want_minify:
+            main_cmd.append("--compact-minify")
+        else:
+            main_cmd.append("--no-compact-minify")
+        depth_label = (
+            "+ raw кроки"
+            if bool(args.get("compact_legacy_payload"))
+            else "лише компакт"
+        )
+        minify_label = ", minify" if want_minify else ""
+        self._emit_log(
+            f"[INFO] Компактизація: формат {compact_fmt}{minify_label}, глибина: {depth_label}.\n"
+        )
 
         prompt_ov_path = self._write_session_prompt_overrides(args)
         if prompt_ov_path:
             main_cmd.extend(["--prompt-overrides", prompt_ov_path])
             self._emit_log(
                 "[DEBUG] Активні перевизначення промптів сесії (не змінюють код проєкту).\n"
+            )
+
+        try:
+            n_replicates = max(1, min(5, int(args.get("merge_replicate_count", 1) or 1)))
+        except (TypeError, ValueError):
+            n_replicates = 1
+        is_openrouter = bool(args.get("cloud_mode")) and str(
+            args.get("cloud_provider", "") or ""
+        ).lower() == "openrouter"
+        if n_replicates >= 2 and is_openrouter:
+            # Реплікація живе в main.py: декларація за декларацією, N прогонів
+            # паралельно + зшивання через Jev — тому працює однаково у звичайному
+            # режимі й у досьє, з resume, «Стопом» і переміщенням файлів.
+            main_cmd.extend(["--replicates", str(n_replicates)])
+            self._emit_log(
+                f"[INFO] Реплік: {n_replicates} — кожна декларація аналізується "
+                f"{n_replicates} рази паралельно й зшивається через Jev "
+                f"(~{n_replicates}x вартість LLM).\n"
+            )
+
+        if bool(args.get("jev_verify_enabled", True)) and is_openrouter:
+            # Лише анотація знахідок (docs/JEV.md §3.7) — Jev іде через той самий
+            # OpenRouter, куди декларація й так відправляється для LLM.
+            main_cmd.append("--jev-verify")
+            self._emit_log("[INFO] Jev-перевірка фактів знахідок увімкнена.\n")
+
+        if bool(args.get("jev_hint_enabled")):
+            # Ключ не передається явно: main.py сам резолвить його через
+            # resolve_jev_api_key() (env -> .declarator_secrets.json), той самий
+            # ланцюжок, що й для --provider jev.
+            jev_questions_path = _active_jev_questions_path()
+            main_cmd.extend(["--jev-hint", "--jev-questions", str(jev_questions_path)])
+            self._emit_log(
+                f"[INFO] Jev-підказка LLM увімкнена ({jev_questions_path.name}) — "
+                "експериментально, підвищує recall ціною частини хибних тривог (docs/JEV.md §3.3).\n"
             )
 
         self._emit_log("\n=== Запуск аналізу ===\n")
@@ -2576,14 +3056,15 @@ class Api:
                 th = Path(table_html)
                 if not th.is_absolute():
                     th = BASE_DIR / th
-                self._append_dossier_charts_after_report(args, th)
+                dossier_changes_result = self._append_dossier_charts_after_report(args, th)
 
-                from dossier_html_summary import run_dossier_table_summary_append
+                from dossier.changes import timeline_text
+                from dossier.summary import run_dossier_table_summary_append
 
                 cloud_provider = str(args.get("cloud_provider", "ollama") or "ollama").lower()
                 if args.get("cloud_mode") and cloud_provider == "openrouter":
                     dr_provider = "openrouter"
-                    dr_model = (args.get("openrouter_model") or "").strip() or "meta-llama/llama-3.3-70b-instruct"
+                    dr_model = (args.get("openrouter_model") or "").strip() or "qwen/qwen3-30b-a3b-instruct-2507"
                     dr_host = args.get("openrouter_host", "https://openrouter.ai/api/v1")
                     dr_key = str(args.get("openrouter_api_key", "") or "")
                     dr_cloud = True
@@ -2617,6 +3098,9 @@ class Api:
                     cloud_mode=dr_cloud,
                     prompt_overrides=dossier_po,
                     provider=dr_provider,
+                    # Готова хронологія змін замість пошуку динаміки в 170 тис.
+                    # символів HTML (docs/JEV.md §3.6); порожньо — поведінка як раніше.
+                    changes_timeline=timeline_text(dossier_changes_result or {}),
                 )
                 self._emit_log(dr_msg + "\n")
                 if not ok_dr:
@@ -2741,17 +3225,23 @@ class Api:
         search_query: str = "",
         declaration_type: int = 0,
         document_type: int = 0,
+        random_sample: bool = False,
+        random_options: dict | None = None,
     ) -> dict:
         """Download up to limit declarations using open NAZK API filters.
         declaration_year=-1 — do not filter by year (search only, if set).
         search_query — API query param (from 3 chars); may combine with year.
         declaration_type — 1–4 or 0 (all); document_type — 1–3 or 0 (all).
+        random_sample — random selection (requires the year filter).
+        random_options — {mode, pool_cap, pages_cap, random_pages_count}.
         """
         try:
             y = int(declaration_year)
             lim = int(limit)
             decl_t = int(declaration_type or 0)
             doc_t = int(document_type or 0)
+            random_flag = bool(random_sample)
+            rand_opts = random_options if isinstance(random_options, dict) else None
         except (TypeError, ValueError):
             return {"ok": False, "errors": ["Некоректні рік або кількість."]}
         try:
@@ -2767,6 +3257,8 @@ class Api:
                 log_line=self._emit_log,
                 declaration_type=decl_t if decl_t > 0 else None,
                 document_type=doc_t if doc_t > 0 else None,
+                random_sample=random_flag,
+                random_options=rand_opts,
             )
         except Exception as exc:  # noqa: BLE001
             self._emit_log(f"[NAZK] Помилка: {exc}\n")
@@ -2799,6 +3291,7 @@ class Api:
 
     def shutdown(self) -> None:
         self._remove_session_prompt_overrides()
+        _remove_session_jev_files()
         if self._proc and self._proc.poll() is None:
             self.control_pipeline("stop")
             try:

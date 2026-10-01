@@ -81,7 +81,7 @@ export function CloudHelpBodyEn() {
             </li>
             <li>
               <strong>OpenRouter model</strong> — pick a model (e.g.
-              meta-llama/llama-3.3-70b-instruct)
+              qwen/qwen3-30b-a3b-instruct-2507)
             </li>
             <li>
               <strong>OpenRouter API key</strong> — paste the <code>sk-or-v1-...</code> key
@@ -190,63 +190,71 @@ export function CompactModeHelpBodyEn() {
         and often worse in quality.
       </p>
 
-      <h3 className="compact-mode-help-h3">What is compact mode</h3>
+      <h3 className="compact-mode-help-h3">What is compaction</h3>
       <p>
         Before analysis the app runs the declaration through <strong>compaction</strong> — it turns
-        raw JSON into a tight, ordered structure readable by both humans and the model. At this
-        stage the app:
+        raw JSON into a tight, ordered structure. At this stage the app:
       </p>
       <ul className="welcome-help-list">
         <li>
-          keeps only meaningful sections: profile, income, real estate, vehicles, cash, corporate
-          rights, family, liabilities, significant changes;
+          keeps meaningful sections for steps 0–17: profile, family, real estate, vehicles,
+          valuable movable property, securities, share capital, corporate rights, intangible
+          assets, income, cash, liabilities, significant changes, expenses, organizations, banks;
         </li>
         <li>
-          computes totals (total income, cash, vehicle/property value) into{" "}
-          <code className="deep-research-code">quick_totals</code>;
+          computes totals into <code className="deep-research-code">quick_totals</code>;
         </li>
-        <li>
-          decodes codes: declaration type and period, property owners, family members, banks;
-        </li>
+        <li>decodes codes: declaration type and period, owners, family members;</li>
         <li>drops empty steps, technical noise, and privacy placeholders.</li>
       </ul>
       <p>
-        The result is compact JSON sent to the model as input for risk finding. The switch in
-        advanced settings controls <strong>how much raw data</strong> to add to that compact
-        structure.
+        In advanced settings there are two independent axes: <strong>format</strong> (how to pack
+        the compact for the LLM) and <strong>depth</strong> (whether to add raw steps). Step
+        coverage is always part of compact v2; v3 only changes serialization.
       </p>
 
       <h3 className="compact-mode-help-h3">
-        <span className="compact-mode-help-dot compact-mode-help-dot--green" aria-hidden /> Leaner
+        <span className="compact-mode-help-dot compact-mode-help-dot--green" aria-hidden /> Format:
+        Compact v2
         <span className="compact-mode-help-tag">default</span>
       </h3>
-      <p>
-        Sends only the <strong>compact structure</strong> + banks. Rare non-standard steps are
-        added briefly (no full raw copy).
-      </p>
-      <ul className="welcome-help-list">
-        <li>Smallest request → fastest and cheapest in tokens.</li>
-        <li>Enough for typical annual declarations.</li>
-        <li>Best for batch-processing dozens of files in a row.</li>
-      </ul>
+      <p>Ordinary JSON with named sections. Best for model readability. Recommended start.</p>
 
       <h3 className="compact-mode-help-h3">
-        <span className="compact-mode-help-dot compact-mode-help-dot--blue" aria-hidden /> More detail
+        <span className="compact-mode-help-dot compact-mode-help-dot--amber" aria-hidden /> Format:
+        Compact v3
+        <span className="compact-mode-help-tag">experimental</span>
       </h3>
       <p>
-        A <strong>full raw copy</strong> of every filled declaration step is added to the compact
-        structure — as in the original registry JSON.
+        Same values, but uniform arrays pack into{" "}
+        <code className="deep-research-code">{"{_cols, _rows}"}</code> — field names once. Fewer
+        tokens; the model may read the structure less well. <strong>Minify JSON</strong> strips
+        whitespace (v3 only).
       </p>
-      <ul className="welcome-help-list">
-        <li>The model sees all fields and original wording; nothing is “lost” in compression.</li>
-        <li>Useful for complex years, change notices, and rare steps where details matter.</li>
-        <li>The request is several times larger → analysis is slower and more expensive.</li>
-      </ul>
+
+      <h3 className="compact-mode-help-h3">
+        <span className="compact-mode-help-dot compact-mode-help-dot--green" aria-hidden /> Depth:
+        Compact only
+      </h3>
+      <p>
+        The request gets the compact structure for steps 0–17 (+{" "}
+        <code className="deep-research-code">raw_extras</code> only as a safety net outside that
+        set). Smallest and cheapest request.
+      </p>
+
+      <h3 className="compact-mode-help-h3">
+        <span className="compact-mode-help-dot compact-mode-help-dot--blue" aria-hidden /> Depth: +
+        raw steps
+      </h3>
+      <p>
+        A full raw copy of every filled step is added. Useful if the model “missed” a rare asset;
+        the request is several times larger.
+      </p>
 
       <p className="compact-mode-help-tip">
-        <strong>Tip.</strong> Start with <strong>Leaner</strong>. If the report is empty, shallow,
-        or the model “missed” an asset — turn on <strong>More detail</strong> and re-run that
-        declaration.
+        <strong>Tip.</strong> Start with <strong>v2 + compact only</strong>. Turn on{" "}
+        <strong>v3</strong> for batch runs after a quality check. Use <strong>+ raw</strong> when
+        the report is shallow or something may have been lost in compaction.
       </p>
     </>
   );
